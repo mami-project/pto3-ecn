@@ -1,0 +1,19 @@
+[ 
+    { 
+        "name": "pathspider_ecn_raw",
+        "kind": "raw",
+        "doc_ref": "https://github.com/mami-project/pto3-ecn/blob/master/README.md",
+        "contact": "Brian Trammell <brian@trammell.ch>",
+        "repo_ref": "https://github.com/mami-project/pto3-ecn",
+        "exec": "analyze_ecn_raw.py"
+    },
+
+    { 
+        "name": "pathspider_ecn_noisefloor",
+        "kind": "raw",
+        "doc_ref": "https://github.com/mami-project/pto3-ecn/blob/master/README.md",
+        "contact": "Brian Trammell <brian@trammell.ch>",
+        "repo_ref": "https://github.com/mami-project/pto3-ecn",
+        "exec": "analyze_ecn_noisefloor.py"
+    }
+]

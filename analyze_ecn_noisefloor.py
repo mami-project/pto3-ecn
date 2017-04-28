@@ -1,3 +1,4 @@
+import pandas as pd
 
 class PathspiderECNSuperAnalyzer:
     """
@@ -71,3 +72,9 @@ class PathspiderECNSuperAnalyzer:
             return false
 
         return 'pathspider.ecn' in metadata
+
+def observations_to_dataframe(infile):
+    pass
+
+def condition_counts_by_target(df):
+    pass
