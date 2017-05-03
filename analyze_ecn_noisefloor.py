@@ -2,7 +2,7 @@ import pandas as pd
 
 class PathspiderECNSuperAnalyzer:
     """
-    Create superconditions as an intermediate step 
+    Create superconditions as an intermediate step
     toward analyzing path dependency of ECN connectivity
     """
 
@@ -29,12 +29,12 @@ class PathspiderECNSuperAnalyzer:
         # calculate super conditions
         sdf['super_works'] =         sdf['int_e0seen'] & sdf['int_e1seen']
         sdf['super_offline'] =      ~sdf['int_e0seen'] & ~sdf['int_e1seen']
-        sdf['super_broken'] = (     (sdf['ecn.connectivity.broken'] > 0) & 
-                                    (sdf['ecn.connectivity.works'] == 0) & 
-                                    (sdf['ecn.connectivity.transient'] == 0)) 
-        sdf['super_transient'] = (  (sdf['ecn.connectivity.transient'] > 0) & 
-                                    (sdf['ecn.connectivity.works'] == 0) & 
-                                    (sdf['ecn.connectivity.broken'] == 0)) 
+        sdf['super_broken'] = (     (sdf['ecn.connectivity.broken'] > 0) &
+                                    (sdf['ecn.connectivity.works'] == 0) &
+                                    (sdf['ecn.connectivity.transient'] == 0))
+        sdf['super_transient'] = (  (sdf['ecn.connectivity.transient'] > 0) &
+                                    (sdf['ecn.connectivity.works'] == 0) &
+                                    (sdf['ecn.connectivity.broken'] == 0))
 
         writer.begin()
         writer['pathspider.ecn.super'] = "yes"
@@ -72,6 +72,13 @@ class PathspiderECNSuperAnalyzer:
             return false
 
         return 'pathspider.ecn' in metadata
+
+def ndjson_iterator(infile):
+    """
+    Iterate over an NDJSON file, producing lists for arrays and dicts for objects.
+
+    """
+    pass
 
 def observations_to_dataframe(infile):
     pass

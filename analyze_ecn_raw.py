@@ -4,6 +4,8 @@ import dateutil.parser
 
 # FIXME Move me to mamipto.analyze, and make me less brittle
 
+ISO8601_FMT = "%Y-%m-%dT%H:%M:%S"
+
 class ObservationWriter:
     def __init__(self, outfile):
         self._outfile = outfile
@@ -13,13 +15,16 @@ class ObservationWriter:
         self._osid += 1
 
     def observe(self, start_time, end_time, path, condition, value=None):
-        rec = [self._osid, start_time, end_time, path, condition]
+        rec = [self._osid,
+               start_time.strftime(ISO8601_FMT),
+               end_time.strftime(ISO8601_FMT),
+               path, condition]
 
         if value is not None:
             rec.append(value)
 
         json.dump(rec, self._outfile)
-        self._outfile.write("\n".encode())
+        self._outfile.write("\n")
 
 
 def interested_in(metadata):
@@ -43,13 +48,13 @@ if __name__ == "__main__":
             else:
                 sys.exit(1)
         except Exception as e:
-            sys.stderr.write((e.message + "\n").encode())
+            sys.stderr.write(repr(e) + "\n")
             sys.exit(-1)
     else:
         try:
             analyze(sys.stdin, ObservationWriter(sys.stdout))
             sys.exit(0)
         except Exception as e:
-            sys.stderr.write((e.message + "\n").encode())
+            sys.stderr.write(repr(e) + "\n")
             sys.exit(-1)
 
