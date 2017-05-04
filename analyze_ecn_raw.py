@@ -1,5 +1,6 @@
 import sys
 import json
+import argparse
 import dateutil.parser
 
 # FIXME Move me to mamipto.analyze, and make me less brittle
@@ -26,12 +27,13 @@ class ObservationWriter:
         json.dump(rec, self._outfile)
         self._outfile.write("\n")
 
+def interested(args):
+    for ft in ['ps-ecn-ndjson', 'ps-ecn-ndjson-bz2']:
+        if args.file_type == ft:
+            return True
+    return False
 
-def interested_in(metadata):
-    return (metadata['file_type'] == 'ps-ecn-ndjson' or
-            metadata['file_type'] == 'ps-ecn-ndjson-bz2')
-
-def analyze(infile, writer):
+def analyze(args, infile, writer):
     for line in infile:
         raw_obs = json.loads(line)
         for condition in raw_obs['conditions']:
@@ -40,21 +42,34 @@ def analyze(infile, writer):
                            path=[raw_obs['sip'], '*', raw_obs['dip']],
                            condition=condition)
 
+def _parse_args():
+    parser = argparse.ArgumentParser(description="Analyze Pathspider ECN plugin data into PTO observations")
+
+    parser.add_argument("--interest", action="store_true", help="Evaluate interest instead of analyzing")
+    parser.add_argument("--file-type", type=str, help="PTO file type")
+    parser.add_argument("--time-start", type=str, help="Start time from raw file metadata")
+    parser.add_argument("--time-end", type=str, help="End time from raw file metadata")
+    parser.add_argument("-M", type=str, action="append", help="Additional metadata key=value pair")
+
+    args = parser.parse_args()
+
+    args.metadata = {}
+    for kv in args.m:
+        (k, v) = kv.split("=")
+        if k is not None and v is not None:
+            args.metadata[k] = v
+
+    return args
+
 if __name__ == "__main__":
-    if "--pto-interest" in sys.argv:
-        try:
-            if interested_in(json.load(sys.stdin)):
-                sys.exit(0)
-            else:
-                sys.exit(1)
-        except Exception as e:
-            sys.stderr.write(repr(e) + "\n")
-            sys.exit(-1)
+    args = _parse_args()
+
+    if args.interest:
+        sys.exit(0 if interested(args) else 1)
     else:
         try:
-            analyze(sys.stdin, ObservationWriter(sys.stdout))
+            analyze(args, sys.stdin, ObservationWriter(sys.stdout))
             sys.exit(0)
         except Exception as e:
             sys.stderr.write(repr(e) + "\n")
             sys.exit(-1)
-
