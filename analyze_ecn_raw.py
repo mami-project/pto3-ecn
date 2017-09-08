@@ -6,8 +6,11 @@ import dateutil.parser
 from mamipto.analysis import ObservationWriter, parse_analyzer_args
 
 def interested(args):
+    if 'file_type' not in args.metadata:
+        return False
+
     for ft in ['ps-ecn-ndjson', 'ps-ecn-ndjson-bz2']:
-        if args.file_type == ft:
+        if ft in args.metadata['file_type']:
             return True
     return False
 
