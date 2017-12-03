@@ -57,6 +57,7 @@ func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
 
 	return obsen, nil
 }
+
 func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 	// unmarshal metadata into an RDS metadata object
 	md, err := pto3.RDSMetadataFromReader(metain, nil)
@@ -75,6 +76,9 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 		return fmt.Errorf("unsupported filetype %s", md.Filetype())
 	}
 
+	// track conditions in the input
+	hasCondition := make(map[string]bool)
+
 	// now scan input for observations
 	var lineno int
 	for scanner.Scan() {
@@ -82,25 +86,52 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 		line := strings.TrimSpace(scanner.Text())
 		switch line[0] {
 		case '{':
-			// metadata. ignore.
-			continue
-		case '[':
 			obsen, err := extractECNObservations(line)
 			if err != nil {
-				return fmt.Errorf("parse error for observation at line %d: %s", lineno, err.Error())
+				return fmt.Errorf("error parsing PathSpider observation at line %d: %s", lineno, err.Error())
 			}
 
-			for _, obs := range obsen {
-				b, err := json.Marshal(obs)
-				if err != nil {
-					return fmt.Errorf("cannon marshal observation at line %d: %s", lineno, err.Error())
-				}
+			for _, o := range obsen {
+				hasCondition[o.Condition.Name] = true
+			}
 
-				if _, err = fmt.Fprintf(out, "%s\n", b); err != nil {
-					return fmt.Errorf("error writing observation at line %d: %s", lineno, err.Error())
-				}
+			if err := pto3.WriteObservations(obsen, out); err != nil {
+				return fmt.Errorf("error writing observation from line %d: %s", lineno, err.Error())
 			}
 		}
+	}
+
+	// now the metadata
+	mdout := make(map[string]interface{})
+	mdcond := make([]string, 0)
+
+	// copy all aux metadata from the raw file
+	for k := range md.Metadata {
+		mdout[k] = md.Metadata[k]
+	}
+
+	// create condition list from observed conditions
+	for k := range hasCondition {
+		mdcond = append(mdcond, k)
+	}
+	mdout["_conditions"] = mdcond
+
+	// add start and end time and owner, since we have it
+	mdout["_owner"] = md.Owner
+	mdout["_time_start"] = md.TimeStart.Format(time.RFC3339)
+	mdout["_time_end"] = md.TimeStart.Format(time.RFC3339)
+
+	// hardcode analyzer path (FIXME, tag?)
+	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_normalizer/ecn_normalizer.json"
+
+	// serialize and write to stdout
+	b, err := json.Marshal(mdout)
+	if err != nil {
+		return fmt.Errorf("error marshaling metadata: %s", err.Error())
+	}
+
+	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+		return fmt.Errorf("error writing metadata: %s", err.Error())
 	}
 
 	return nil
