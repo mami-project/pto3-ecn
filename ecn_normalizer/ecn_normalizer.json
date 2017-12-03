@@ -1,0 +1,7 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "A normalizer to extract ECN observations from Pathspider version 1 and version 2 NDJSON files",
+    "_file_types" : ["ps-ecn-ndjson", "ps-ecn-ndjson-bz2"],
+    "_platform" : "golang-1.9",
+    "_invocation" : "ecn_normalizer"
+}
