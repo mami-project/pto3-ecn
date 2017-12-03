@@ -48,8 +48,8 @@ func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
 	for i, c := range psobs.Conditions {
-		obsen[i].Start = start
-		obsen[i].End = end
+		obsen[i].Start = &start
+		obsen[i].End = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
 		obsen[i].Condition.Name = c
