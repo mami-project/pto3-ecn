@@ -68,9 +68,9 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 	// check filetype and select scanner
 	var scanner *bufio.Scanner
 	switch md.Filetype() {
-	case "ps-ecn-ndjson": // TODO is there a difference between pathsoider and pathspider2 here?
+	case "pathspider-v1-ecn-ndjson":
 		scanner = bufio.NewScanner(in)
-	case "ps-ecn-ndjson-bz2":
+	case "pathspider-v1-ecn-ndjson-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
 	default:
 		return fmt.Errorf("unsupported filetype %s", md.Filetype())
