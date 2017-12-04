@@ -32,11 +32,26 @@ func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
 	}
 
 	// try to parse timestamps
-	start, err := time.Parse("2006-01-02 15:04:05.000000", psobs.Time.From)
+	formats := []string{"2006-01-02 15:04:05.000000", "2006-01-02 15:04:05"}
+
+	var start, end time.Time
+	var err error
+	for _, timefmt := range formats {
+		start, err = time.Parse(timefmt, psobs.Time.From)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse start time: %s", err.Error())
 	}
-	end, err := time.Parse("2006-01-02 15:04:05.000000", psobs.Time.To)
+
+	for _, timefmt := range formats {
+		end, err = time.Parse(timefmt, psobs.Time.To)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse end time: %s", err.Error())
 	}
