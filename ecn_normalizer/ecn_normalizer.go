@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"compress/bzip2"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -18,7 +19,7 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-type PathspiderV1Observation struct {
+type psV1Observation struct {
 	Time struct {
 		From string `json:"from"`
 		To   string `json:"to"`
@@ -28,8 +29,8 @@ type PathspiderV1Observation struct {
 	Conditions []string `json:"conditions"`
 }
 
-func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
-	var psobs PathspiderV1Observation
+func extractECNObservations(ndjsonLine string, forceSource string) ([]pto3.Observation, error) {
+	var psobs psV1Observation
 
 	if err := json.Unmarshal([]byte(ndjsonLine), &psobs); err != nil {
 		return nil, err
@@ -62,13 +63,21 @@ func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
 
 	// make a path
 	path := new(pto3.Path)
-	path.String = fmt.Sprintf("%s * %s", psobs.Sip, psobs.Dip)
+
+	var source string
+	if forceSource != "" {
+		source = forceSource
+	} else {
+		source = psobs.Sip
+	}
+
+	path.String = fmt.Sprintf("%s * %s", source, psobs.Dip)
 
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
 	for i, c := range psobs.Conditions {
-		obsen[i].Start = &start
-		obsen[i].End = &end
+		obsen[i].TimeStart = &start
+		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
 		obsen[i].Condition.Name = c
@@ -77,22 +86,22 @@ func extractECNObservations(ndjsonLine string) ([]pto3.Observation, error) {
 	return obsen, nil
 }
 
-func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
+func normalizeECN(in io.Reader, metain io.Reader, out io.Writer, forceSource string) error {
 	// unmarshal metadata into an RDS metadata object
-	md, err := pto3.RDSMetadataFromReader(metain, nil)
+	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %s", err.Error())
 	}
 
 	// check filetype and select scanner
 	var scanner *bufio.Scanner
-	switch md.Filetype() {
+	switch md.Filetype(true) {
 	case "pathspider-v1-ecn-ndjson":
 		scanner = bufio.NewScanner(in)
 	case "pathspider-v1-ecn-ndjson-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
 	default:
-		return fmt.Errorf("unsupported filetype %s", md.Filetype())
+		return fmt.Errorf("unsupported filetype %s", md.Filetype(true))
 	}
 
 	// track conditions in the input
@@ -105,7 +114,7 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 		line := strings.TrimSpace(scanner.Text())
 		switch line[0] {
 		case '{':
-			obsen, err := extractECNObservations(line)
+			obsen, err := extractECNObservations(line, forceSource)
 			if err != nil {
 				return fmt.Errorf("error parsing PathSpider observation at line %d: %s", lineno, err.Error())
 			}
@@ -137,8 +146,8 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 
 	// add start and end time and owner, since we have it
 	mdout["_owner"] = md.Owner
-	mdout["_time_start"] = md.TimeStart.Format(time.RFC3339)
-	mdout["_time_end"] = md.TimeStart.Format(time.RFC3339)
+	mdout["_time_start"] = md.TimeStart(true).Format(time.RFC3339)
+	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_normalizer/ecn_normalizer.json"
@@ -157,11 +166,14 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 }
 
 func main() {
+	sourceArg := flag.String("source", "", "ignore source in input and force it to a given `value`")
+	flag.Parse()
+
 	// wrap a file around the metadata stream
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
 	// and go
-	if err := normalizeECN(os.Stdin, mdfile, os.Stdout); err != nil {
+	if err := normalizeECN(os.Stdin, mdfile, os.Stdout, *sourceArg); err != nil {
 		log.Fatal(err)
 	}
 }
