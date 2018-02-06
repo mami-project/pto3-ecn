@@ -1,3 +1,7 @@
+// ecn_normalizer is a local normalizer (for use with ptonorm) that converts
+// ndjson files from PathSpider (currently, version 1, though version 2
+// support is planned) to PTO observations.
+
 package main
 
 import (
