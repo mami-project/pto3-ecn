@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"compress/bzip2"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -29,7 +28,7 @@ type psV1Observation struct {
 	Conditions []string `json:"conditions"`
 }
 
-func extractECNObservations(ndjsonLine string, forceSource string) ([]pto3.Observation, error) {
+func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePrepend string) ([]pto3.Observation, error) {
 	var psobs psV1Observation
 
 	if err := json.Unmarshal([]byte(ndjsonLine), &psobs); err != nil {
@@ -65,13 +64,28 @@ func extractECNObservations(ndjsonLine string, forceSource string) ([]pto3.Obser
 	path := new(pto3.Path)
 
 	var source string
-	if forceSource != "" {
-		source = forceSource
+	if sourceOverride != "" {
+		source = sourceOverride
 	} else {
 		source = psobs.Sip
 	}
 
-	path.String = fmt.Sprintf("%s * %s", source, psobs.Dip)
+	var pathElements []string
+	if sourcePrepend != "" {
+		if source != "" {
+			pathElements = []string{sourcePrepend, source, "*", psobs.Dip}
+		} else {
+			pathElements = []string{sourcePrepend, "*", psobs.Dip}
+		}
+	} else {
+		if source != "" {
+			pathElements = []string{source, "*", psobs.Dip}
+		} else {
+			pathElements = []string{"*", psobs.Dip}
+		}
+	}
+
+	path.String = strings.Join(pathElements, " ")
 
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
@@ -86,7 +100,7 @@ func extractECNObservations(ndjsonLine string, forceSource string) ([]pto3.Obser
 	return obsen, nil
 }
 
-func normalizeECN(in io.Reader, metain io.Reader, out io.Writer, forceSource string) error {
+func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 	// unmarshal metadata into an RDS metadata object
 	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
@@ -95,14 +109,22 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer, forceSource str
 
 	// check filetype and select scanner
 	var scanner *bufio.Scanner
+	var extractFunc func(string, string, string) ([]pto3.Observation, error)
+
 	switch md.Filetype(true) {
 	case "pathspider-v1-ecn-ndjson":
 		scanner = bufio.NewScanner(in)
+		extractFunc = extractECNV1Observations
 	case "pathspider-v1-ecn-ndjson-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
+		extractFunc = extractECNV1Observations
 	default:
 		return fmt.Errorf("unsupported filetype %s", md.Filetype(true))
 	}
+
+	// check for source override and prepend in metdata
+	sourceOverride := md.Get("source_override", true)
+	sourcePrepend := md.Get("source_prepend", true)
 
 	// track conditions in the input
 	hasCondition := make(map[string]bool)
@@ -114,7 +136,7 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer, forceSource str
 		line := strings.TrimSpace(scanner.Text())
 		switch line[0] {
 		case '{':
-			obsen, err := extractECNObservations(line, forceSource)
+			obsen, err := extractFunc(line, sourceOverride, sourcePrepend)
 			if err != nil {
 				return fmt.Errorf("error parsing PathSpider observation at line %d: %s", lineno, err.Error())
 			}
@@ -166,14 +188,11 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer, forceSource str
 }
 
 func main() {
-	sourceArg := flag.String("source", "", "ignore source in input and force it to a given `value`")
-	flag.Parse()
-
 	// wrap a file around the metadata stream
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
 	// and go
-	if err := normalizeECN(os.Stdin, mdfile, os.Stdout, *sourceArg); err != nil {
+	if err := normalizeECN(os.Stdin, mdfile, os.Stdout); err != nil {
 		log.Fatal(err)
 	}
 }
