@@ -167,7 +167,7 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 	mdout["_conditions"] = mdcond
 
 	// add start and end time and owner, since we have it
-	mdout["_owner"] = md.Owner
+	mdout["_owner"] = md.Owner(true)
 	mdout["_time_start"] = md.TimeStart(true).Format(time.RFC3339)
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
