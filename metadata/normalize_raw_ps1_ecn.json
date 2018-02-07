@@ -1,7 +1,0 @@
-{
-    "_owner": "brian@trammell.ch",
-    "_file_types": ["pathspider-v1-ecn-ndjson", "pathspider-v1-ecn-ndjson-bz2"],
-    "_invocation": "./invoke_normalizer.sh",
-    "_platform": "golang-1.8",
-    "description": "Normalizes raw Pathspider v1.x ECN data to observations"
-}
