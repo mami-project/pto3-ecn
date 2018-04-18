@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/colinmarc/sequencefile"
 )
@@ -22,8 +23,12 @@ func list(sf *sequencefile.Reader) error {
 
 func extract(sf *sequencefile.Reader, k string) error {
 	for sf.Scan() {
-		if k == string(sf.Key()[:]) {
-			_, err := os.Stdout.Write(sf.Value())
+		if k == strings.TrimSpace(string(sf.Key()[:])) {
+			out, err := os.Create(k)
+			if err != nil {
+				return err
+			}
+			_, err = out.Write(sf.Value())
 			return err
 		}
 	}
@@ -37,7 +42,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s: list or extract entries from a sequence file\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Usage: %s [-list|-extract key] file.seq > file.out\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-list|-extract key] file.seq\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 
