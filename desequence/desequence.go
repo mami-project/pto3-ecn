@@ -34,6 +34,8 @@ func extract(sf *sequencefile.Reader, k string) error {
 		log.Printf("comparing %#v == %#v", k, sfk)
 
 		if k == sfk {
+			log.Printf("extracting %s", sfk)
+
 			out, err := os.Create(k)
 			if err != nil {
 				return err
@@ -46,6 +48,30 @@ func extract(sf *sequencefile.Reader, k string) error {
 		return err
 	}
 	return fmt.Errorf("missing key %s; use -list to list keys", k)
+}
+
+func extractAll(sf *sequencefile.Reader) error {
+	for sf.Scan() {
+
+		sfk := strings.TrimFunc(string(sf.Key()[:]), decrapifySequenceKey)
+
+		if err := sf.Err(); err != nil {
+			return err
+		}
+
+		log.Printf("extracting %s", sfk)
+
+		out, err := os.Create(sfk)
+		if err != nil {
+			return err
+		}
+
+		if _, err := out.Write(sf.Value()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func main() {
@@ -79,8 +105,9 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "missing -list or -extract flag")
-		flag.Usage()
-		os.Exit(1)
+		log.Printf("extracting everything from %s", args[0])
+		if err := extractAll(sf); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
