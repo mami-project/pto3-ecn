@@ -23,6 +23,9 @@ func list(sf *sequencefile.Reader) error {
 
 func extract(sf *sequencefile.Reader, k string) error {
 	for sf.Scan() {
+
+		log.Printf("comparing %#v == %#v", k, strings.TrimSpace(string(sf.Key()[:])))
+
 		if k == strings.TrimSpace(string(sf.Key()[:])) {
 			out, err := os.Create(k)
 			if err != nil {
@@ -35,7 +38,7 @@ func extract(sf *sequencefile.Reader, k string) error {
 	if err := sf.Err(); err != nil {
 		return err
 	}
-	return fmt.Errorf("missing key %s; use -list to list keys")
+	return fmt.Errorf("missing key %s; use -list to list keys", k)
 }
 
 func main() {
