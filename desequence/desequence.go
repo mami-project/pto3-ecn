@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/colinmarc/sequencefile"
 )
@@ -14,9 +15,14 @@ var helpFlag = flag.Bool("h", false, "display a help message")
 var listFlag = flag.Bool("list", false, "list keys in file")
 var extractFlag = flag.String("extract", "", "`key` to extract from file to stdout")
 
+func decrapifySequenceKey(r rune) bool {
+	return !(unicode.IsControl(r) || unicode.IsSpace(r))
+}
+
 func list(sf *sequencefile.Reader) error {
 	for sf.Scan() {
-		fmt.Printf("%s\n", sf.Key())
+		sfk := strings.TrimFunc(string(sf.Key()[:]), decrapifySequenceKey)
+		fmt.Printf("%s\n", sfk)
 	}
 	return sf.Err()
 }
@@ -24,9 +30,10 @@ func list(sf *sequencefile.Reader) error {
 func extract(sf *sequencefile.Reader, k string) error {
 	for sf.Scan() {
 
-		log.Printf("comparing %#v == %#v", k, strings.TrimSpace(string(sf.Key()[:])))
+		sfk := strings.TrimFunc(string(sf.Key()[:]), decrapifySequenceKey)
+		log.Printf("comparing %#v == %#v", k, sfk)
 
-		if k == strings.TrimSpace(string(sf.Key()[:])) {
+		if k == sfk {
 			out, err := os.Create(k)
 			if err != nil {
 				return err
