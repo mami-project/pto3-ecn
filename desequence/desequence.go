@@ -16,7 +16,7 @@ var listFlag = flag.Bool("list", false, "list keys in file")
 var extractFlag = flag.String("extract", "", "`key` to extract from file to stdout")
 
 func decrapifySequenceKey(r rune) bool {
-	return !(unicode.IsControl(r) || unicode.IsSpace(r))
+	return unicode.IsControl(r) || unicode.IsSpace(r)
 }
 
 func list(sf *sequencefile.Reader) error {
