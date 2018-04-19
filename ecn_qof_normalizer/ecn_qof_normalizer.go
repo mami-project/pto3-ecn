@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/calmh/ipfix"
 
@@ -184,46 +187,298 @@ func qofSession() (*ipfix.Session, *ipfix.Interpreter) {
 	return s, i
 }
 
-type qofConditionExtractor struct {
-	out            io.Writer
-	sourceOverride string
-	sourcePrepend  string
-	dstPort        uint16
+type QofObserver struct {
+	out             io.Writer
+	sourceOverride  string
+	sourcePrepend   string
+	requiredDstPort uint16
+
+	hasCondition map[string]struct{}
+
+	pendingTCPFlows map[string]*QofTCPFlow
+	pendingECNFlows map[string]*QofTCPFlow
+}
+
+func NewConditionExtractor() *QofObserver {
+	out := new(QofObserver)
+
+	out.hasCondition = make(map[string]struct{})
+	out.pendingTCPFlows = make(map[string]*QofTCPFlow)
+	out.pendingECNFlows = make(map[string]*QofTCPFlow)
+
+	return out
 }
 
 const (
-	FIN = 0x01
-	SYN = 0x02
-	RST = 0x04
-	PSH = 0x08
-	ACK = 0x10
-	URG = 0x20
-	ECE = 0x40
-	CWR = 0x80
+	FIN      = 0x01
+	SYN      = 0x02
+	RST      = 0x04
+	PSH      = 0x08
+	ACK      = 0x10
+	URG      = 0x20
+	ECE      = 0x40
+	CWR      = 0x80
+	QECT0    = 0x01
+	QECT1    = 0x02
+	QCE      = 0x04
+	QTSOPT   = 0x10
+	QSACKOPT = 0x20
+	QWSOPT   = 0x40
+	QSYNECT0 = 0x0100
+	QSYNECT1 = 0x0200
+	QSYNCE   = 0x0400
 )
 
-func (qce *qofConditionExtractor) handleFlow(flow map[string]interface{}) error {
+type QofTCPFlow struct {
+	startTime     time.Time
+	srcAddr       *net.IP
+	dstAddr       *net.IP
+	srcPort       uint16
+	dstPort       uint16
+	fwdLastSyn    uint8
+	revLastSyn    uint8
+	revQofChars   uint32
+	didEstablish  bool
+	ecnAttempted  bool
+	ecnNegotiated bool
+	ecnReflected  bool
+	ecnECT0       bool
+	ecnECT1       bool
+	ecnCE         bool
+}
 
-	// drop all flows not on the destination port we care about
-	if qce.dstPort != 0 && qce.dstPort != flow["destinationTransportPort"].(uint16) {
-		return nil
+func flowFromMap(fmap map[string]interface{}, requireSyn bool, requireDport uint16) (*QofTCPFlow, error) {
+
+	// drop non TCP flows
+	proto, ok := fmap["protocolIdentifier"]
+	if !ok {
+		return nil, fmt.Errorf("missing protocol identifier")
 	}
 
-	// drop all flows without an initial SYN, since we joined them in the middle
-	if flow["initialTCPFlags"].(uint8)&TcpSyn == 0 {
-		return nil
+	if proto.(uint8) != 6 {
+		return nil, fmt.Errorf("not a tcp flow")
 	}
+
+	// drop flows without syn
+	if requireSyn {
+		fif, ok := fmap["initialTCPFlags"]
+		if !ok {
+			return nil, fmt.Errorf("missing initial flags")
+		}
+
+		if fif.(uint8)&SYN == 0 {
+			return nil, fmt.Errorf("no syn")
+		}
+	}
+
+	// drop flows without required port
+	dp, ok := fmap["destinationTransportPort"]
+	if !ok {
+		return nil, fmt.Errorf("missing destination port")
+	}
+
+	if requireDport > 0 && dp.(uint16) != requireDport {
+		return nil, fmt.Errorf("bad destination port")
+	}
+
+	// get the rest of the required keys from the map
+	stime, ok := fmap["flowStartMilliseconds"]
+	if !ok {
+		return nil, fmt.Errorf("missing start time")
+	}
+
+	sa, ok := fmap["sourceIPv4Address"]
+	if !ok {
+		sa, ok = fmap["sourceIPv6Address"]
+		if !ok {
+			return nil, fmt.Errorf("missing source IP address")
+		}
+	}
+
+	da, ok := fmap["destinationIPv4Address"]
+	if !ok {
+		da, ok = fmap["destinationIPv6Address"]
+		if !ok {
+			return nil, fmt.Errorf("missing destination IP address")
+		}
+	}
+
+	sp, ok := fmap["sourceTransportPort"]
+	if !ok {
+		return nil, fmt.Errorf("missing source port")
+	}
+
+	fls, ok := fmap["lastSynTcpFlags"]
+	if !ok {
+		return nil, fmt.Errorf("missing forward syn flags")
+	}
+
+	rls, ok := fmap["reverseLastSynTcpFlags"]
+	if !ok {
+		return nil, fmt.Errorf("missing reverse syn flags")
+	}
+
+	rqc, ok := fmap["reverseQofTcpCharacteristics"]
+	if !ok {
+		return nil, fmt.Errorf("missing magic qof stuff")
+	}
+
+	// make a new flow
+	out := new(QofTCPFlow)
+
+	// extract time, addresses and ports
+	out.startTime = stime.(time.Time)
+	out.srcAddr = sa.(*net.IP)
+	out.dstAddr = da.(*net.IP)
+	out.srcPort = sp.(uint16)
+	out.dstPort = dp.(uint16)
 
 	// extract TCP flags
-	fwdLastSyn := flow["lastSynTcpFlags"].(uint8)
-	revLastSyn := flow["reverseLastSynTcpFlags"].(uint8)
-	revQofChars := flow["reverseQofTcpCharacteristics"].(uint32)
+	out.fwdLastSyn = fls.(uint8)
+	out.revLastSyn = rls.(uint8)
+	out.revQofChars = rqc.(uint32)
 
 	// calculate characteristics
-	ecnAttempted := fwdLastSyn&(SYN|ACK|ECE|CWR) == (SYN | ECE | CWR)
-	ecnNegotiated := revLastSyn&(SYN|ACK|ECE|CWR) == (SYN | ACK | ECE)
+	out.ecnAttempted = out.fwdLastSyn&(SYN|ACK|ECE|CWR) == (SYN | ECE | CWR)
+	out.ecnNegotiated = out.revLastSyn&(SYN|ACK|ECE|CWR) == (SYN | ACK | ECE)
+	out.ecnReflected = out.revLastSyn&(SYN|ACK|ECE|CWR) == (SYN | ACK | ECE | CWR)
+	out.ecnECT0 = out.revQofChars&QECT0 == QECT0
+	out.ecnECT1 = out.revQofChars&QECT0 == QECT1
+	out.ecnCE = out.revQofChars&QCE == QCE
+	out.didEstablish = (out.fwdLastSyn&(SYN|ACK|FIN|RST) == (SYN) &&
+		out.revLastSyn&(SYN|ACK|FIN|RST) == (SYN|ACK))
 
-	// WORK POINTER
+	return out, nil
+}
+
+func (qobs *QofObserver) observe(pathflow *QofTCPFlow, conditions ...string) error {
+
+	// make a path
+	path := new(pto3.Path)
+
+	// handle source override from metadata
+	var source string
+	if qobs.sourceOverride != "" {
+		source = qobs.sourceOverride
+	} else {
+		source = pathflow.srcAddr.String()
+	}
+
+	// handle source prepend from metadata
+	var pathElements []string
+	if qobs.sourcePrepend != "" {
+		if source != "" {
+			pathElements = []string{qobs.sourcePrepend, source, "*", pathflow.dstAddr.String()}
+		} else {
+			pathElements = []string{qobs.sourcePrepend, "*", pathflow.srcAddr.String()}
+		}
+	} else {
+		if source != "" {
+			pathElements = []string{source, "*", pathflow.srcAddr.String()}
+		} else {
+			pathElements = []string{"*", pathflow.srcAddr.String()}
+		}
+	}
+
+	path.String = strings.Join(pathElements, " ")
+
+	obsen := make([]pto3.Observation, len(conditions))
+	for i, c := range conditions {
+		obsen[i].TimeStart = &pathflow.startTime
+		obsen[i].TimeEnd = &pathflow.startTime
+		obsen[i].Path = path
+		obsen[i].Condition = new(pto3.Condition)
+		obsen[i].Condition.Name = c
+
+		qobs.hasCondition[c] = struct{}{}
+	}
+
+	return pto3.WriteObservations(obsen, qobs.out)
+}
+
+func (qobs *QofObserver) matchFlows(flowkey string, tcpflow, ecnflow *QofTCPFlow) error {
+
+	// generate connectivity condition
+	var connectivityCondition string
+	if tcpflow.didEstablish && ecnflow.didEstablish {
+		connectivityCondition = "ecn.connectivity.works"
+	} else if tcpflow.didEstablish && !ecnflow.didEstablish {
+		connectivityCondition = "ecn.connectivity.broken"
+	} else if !tcpflow.didEstablish && ecnflow.didEstablish {
+		connectivityCondition = "ecn.connectivity.transient"
+	} else if !tcpflow.didEstablish && !ecnflow.didEstablish {
+		connectivityCondition = "ecn.connectivity.offline"
+	}
+
+	// generate negotiation condition
+	var negotiationCondition string
+	if ecnflow.ecnNegotiated {
+		negotiationCondition = "ecn.negotiation.succeeded"
+	} else if ecnflow.ecnReflected {
+		negotiationCondition = "ecn.negotiation.reflected"
+	} else {
+		negotiationCondition = "ecn.negotiation.failed"
+	}
+
+	// generate mark conditions
+	var ect0Condition, ect1Condition, ceCondition string
+	if ecnflow.ecnECT0 {
+		ect0Condition = "ecn.ipmark.ect0.seen"
+	} else {
+		ect0Condition = "ecn.ipmark.ect0.not_seen"
+	}
+
+	if ecnflow.ecnECT1 {
+		ect1Condition = "ecn.ipmark.ect1.seen"
+	} else {
+		ect1Condition = "ecn.ipmark.ect1.not_seen"
+	}
+
+	if ecnflow.ecnCE {
+		ceCondition = "ecn.ipmark.ce.seen"
+	} else {
+		ceCondition = "ecn.ipmark.ce.not_seen"
+	}
+
+	if err := qobs.observe(ecnflow, connectivityCondition, negotiationCondition, ect0Condition, ect1Condition, ceCondition); err != nil {
+		return err
+	}
+
+	// match is no longer pending
+	delete(qobs.pendingECNFlows, flowkey)
+	delete(qobs.pendingTCPFlows, flowkey)
+
+	return nil
+}
+
+func (qobs *QofObserver) handleFlow(fmap map[string]interface{}) error {
+
+	// turn the map into a flow, skip flows we don't care about
+	flow, _ := flowFromMap(fmap, true, qobs.requiredDstPort)
+	if flow == nil {
+		return nil
+	}
+
+	flowkey := flow.dstAddr.String()
+
+	// determine whether the flow is an ECN attempt or not
+	if flow.ecnAttempted {
+		ecnflow := flow
+		if tcpflow, ok := qobs.pendingTCPFlows[flowkey]; ok {
+			return qobs.matchFlows(flowkey, tcpflow, ecnflow)
+		} else {
+			qobs.pendingECNFlows[flowkey] = ecnflow
+		}
+	} else {
+		tcpflow := flow
+		if ecnflow, ok := qobs.pendingECNFlows[flowkey]; ok {
+			return qobs.matchFlows(flowkey, tcpflow, ecnflow)
+		} else {
+			qobs.pendingTCPFlows[flowkey] = tcpflow
+		}
+	}
+
+	return nil
 }
 
 func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
@@ -246,12 +501,12 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	}
 
 	// create an extractor around the output stream and initialize it with metadata
-	qce := new(qofConditionExtractor)
-	qce.out = out
-	qce.sourceOverride = md.Get("source_override", true)
-	qce.sourcePrepend = md.Get("source_prepend", true)
+	qobs := new(QofObserver)
+	qobs.out = out
+	qobs.sourceOverride = md.Get("source_override", true)
+	qobs.sourcePrepend = md.Get("source_prepend", true)
 	dstPort64, _ := strconv.ParseUint(md.Get("dst_port", true), 10, 16)
-	qce.dstPort = uint16(dstPort64)
+	qobs.requiredDstPort = uint16(dstPort64)
 
 	// get IPFIX session and intepreter
 	s, i := qofSession()
@@ -274,9 +529,13 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 					mrec[field.Name] = field.Value
 				}
 			}
-			qce.handleFlow(mrec)
+			qobs.handleFlow(mrec)
 		}
 	}
+
+	// now write metadata
+
+	// WORK POINTER
 
 	// all done yay
 	return nil
