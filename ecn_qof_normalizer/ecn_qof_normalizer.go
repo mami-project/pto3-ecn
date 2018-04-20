@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/bzip2"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -31,7 +32,6 @@ func init() {
 		"lastSynTcpFlags":              struct{}{},
 		"reverseLastSynTcpFlags":       struct{}{},
 		"reverseQofTcpCharacteristics": struct{}{},
-		"protocolIdentifier":           struct{}{},
 		"flowStartMilliseconds":        struct{}{},
 		"sourceTransportPort":          struct{}{},
 		"destinationTransportPort":     struct{}{},
@@ -209,9 +209,12 @@ type QofObserver struct {
 
 	pendingTCPFlows map[string]*QofTCPFlow
 	pendingECNFlows map[string]*QofTCPFlow
+
+	handledFlowCount int
+	ignoredFlowCount int
 }
 
-func NewConditionExtractor() *QofObserver {
+func NewQofObserver() *QofObserver {
 	out := new(QofObserver)
 
 	out.hasCondition = make(map[string]struct{})
@@ -260,16 +263,6 @@ type QofTCPFlow struct {
 }
 
 func flowFromMap(fmap map[string]interface{}, requireSyn bool, requireDport uint16) (*QofTCPFlow, error) {
-
-	// drop non TCP flows
-	proto, ok := fmap["protocolIdentifier"]
-	if !ok {
-		return nil, fmt.Errorf("missing protocol identifier")
-	}
-
-	if proto.(uint8) != 6 {
-		return nil, fmt.Errorf("not a tcp flow")
-	}
 
 	// drop flows without syn
 	if requireSyn {
@@ -382,13 +375,13 @@ func (qobs *QofObserver) observe(pathflow *QofTCPFlow, conditions ...string) err
 		if source != "" {
 			pathElements = []string{qobs.sourcePrepend, source, "*", pathflow.dstAddr.String()}
 		} else {
-			pathElements = []string{qobs.sourcePrepend, "*", pathflow.srcAddr.String()}
+			pathElements = []string{qobs.sourcePrepend, "*", pathflow.dstAddr.String()}
 		}
 	} else {
 		if source != "" {
-			pathElements = []string{source, "*", pathflow.srcAddr.String()}
+			pathElements = []string{source, "*", pathflow.dstAddr.String()}
 		} else {
-			pathElements = []string{"*", pathflow.srcAddr.String()}
+			pathElements = []string{"*", pathflow.dstAddr.String()}
 		}
 	}
 
@@ -466,12 +459,14 @@ func (qobs *QofObserver) matchFlows(flowkey string, tcpflow, ecnflow *QofTCPFlow
 func (qobs *QofObserver) handleFlow(fmap map[string]interface{}) error {
 
 	// turn the map into a flow, skip flows we don't care about
-	flow, _ := flowFromMap(fmap, true, qobs.requiredDstPort)
-	if flow == nil {
-		return nil
+	flow, err := flowFromMap(fmap, true, qobs.requiredDstPort)
+	if err != nil {
+		qobs.ignoredFlowCount++
+		return err
 	}
 
 	flowkey := flow.dstAddr.String()
+	qobs.handledFlowCount++
 
 	// determine whether the flow is an ECN attempt or not
 	if flow.ecnAttempted {
@@ -513,7 +508,7 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	}
 
 	// create an extractor around the output stream and initialize it with metadata
-	qobs := new(QofObserver)
+	qobs := NewQofObserver()
 	qobs.out = out
 	qobs.sourceOverride = md.Get("source_override", true)
 	qobs.sourcePrepend = md.Get("source_prepend", true)
@@ -527,13 +522,19 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	for {
 		msg, err := s.ParseReader(r)
 		if err != nil {
-			return err
+			if err == io.EOF {
+				break
+			} else {
+				return err
+			}
 		}
 
 		// interpret records in each message into a map,
 		// then pass them to the condition extractor
 		for _, rec := range msg.DataRecords {
+
 			fields := i.Interpret(rec)
+
 			// let's do this slooooooowly.....
 			mrec := make(map[string]interface{})
 			for _, field := range fields {
@@ -541,9 +542,21 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 					mrec[field.Name] = field.Value
 				}
 			}
+
 			qobs.handleFlow(mrec)
+			if qobs.handledFlowCount%1000 == 0 {
+				log.Printf("ignored %d handled %d pending TCP %d pending ECN %d\n",
+					qobs.ignoredFlowCount,
+					qobs.handledFlowCount,
+					len(qobs.pendingTCPFlows),
+					len(qobs.pendingECNFlows))
+			}
+
 		}
 	}
+
+	// dump pending flows?
+	log.Printf("%d pending TCP flows, %d pending ECN flows", len(qobs.pendingTCPFlows), len(qobs.pendingECNFlows))
 
 	// now write metadata
 	mdout := make(map[string]interface{})
@@ -568,11 +581,24 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	// hardcode analyzer path (FIXME, tag?)
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_qof_normalizer/ecn_qof_normalizer.json"
 
+	// serialize and write to stdout
+	b, err := json.Marshal(mdout)
+	if err != nil {
+		return fmt.Errorf("error marshaling metadata: %s", err.Error())
+	}
+
+	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+		return fmt.Errorf("error writing metadata: %s", err.Error())
+	}
+
 	// all done yay
 	return nil
 }
 
 func main() {
+	// force UTC (only works on Unix)
+	os.Setenv("TZ", "")
+
 	// wrap a file around the metadata stream
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
