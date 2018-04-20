@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/bzip2"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -210,6 +211,9 @@ type QofObserver struct {
 	pendingTCPFlows map[string]*QofTCPFlow
 	pendingECNFlows map[string]*QofTCPFlow
 
+	sourceCounts          map[string]int
+	sourceRejectThreshold int
+
 	handledFlowCount int
 	ignoredFlowCount int
 }
@@ -220,7 +224,8 @@ func NewQofObserver() *QofObserver {
 	out.hasCondition = make(map[string]struct{})
 	out.pendingTCPFlows = make(map[string]*QofTCPFlow)
 	out.pendingECNFlows = make(map[string]*QofTCPFlow)
-
+	out.sourceCounts = make(map[string]int)
+	out.sourceRejectThreshold = 100
 	return out
 }
 
@@ -465,7 +470,18 @@ func (qobs *QofObserver) handleFlow(fmap map[string]interface{}) error {
 		return err
 	}
 
+	// extract addresses, reject reversed flows
+	source := flow.srcAddr.String()
+	qobs.sourceCounts[source]++
+
 	flowkey := flow.dstAddr.String()
+
+	if qobs.handledFlowCount > qobs.sourceRejectThreshold &&
+		qobs.sourceCounts[flowkey] > qobs.sourceRejectThreshold/2 {
+		qobs.ignoredFlowCount++
+		return errors.New("ignoring reversed flow")
+	}
+
 	qobs.handledFlowCount++
 
 	// determine whether the flow is an ECN attempt or not

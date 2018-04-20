@@ -91,3 +91,5 @@ ENV/
 # Test data
 *.ipfix
 *.ipfix.bz2
+*.pto_file_metadata.json
+*.ndjson
