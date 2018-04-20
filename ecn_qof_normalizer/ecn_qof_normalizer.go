@@ -131,51 +131,8 @@ func parseIESpec(spec string) (ipfix.DictionaryEntry, error) {
 	}
 	ienum16 := uint16(ienum)
 
-	var ietype ipfix.FieldType
-	switch m[7] {
-	case "unsigned8":
-		ietype = ipfix.Uint8
-	case "unsigned16":
-		ietype = ipfix.Uint16
-	case "unsigned32":
-		ietype = ipfix.Uint32
-	case "unsigned64":
-		ietype = ipfix.Uint64
-	case "signed8":
-		ietype = ipfix.Int8
-	case "signed16":
-		ietype = ipfix.Int16
-	case "signed32":
-		ietype = ipfix.Int32
-	case "signed64":
-		ietype = ipfix.Int64
-	case "float32":
-		ietype = ipfix.Float32
-	case "float64":
-		ietype = ipfix.Float64
-	case "boolean":
-		ietype = ipfix.Boolean
-	case "macAddress":
-		ietype = ipfix.MacAddress
-	case "octetArray":
-		ietype = ipfix.OctetArray
-	case "string":
-		ietype = ipfix.String
-	case "dateTimeSeconds":
-		ietype = ipfix.DateTimeSeconds
-	case "dateTimeMilliseconds":
-		ietype = ipfix.DateTimeMilliseconds
-	case "dateTimeMicroseconds":
-		ietype = ipfix.DateTimeMicroseconds
-	case "dateTimeNanoseconds":
-		ietype = ipfix.DateTimeNanoseconds
-	case "ipv4Address":
-		ietype = ipfix.Ipv4Address
-	case "ipv6Address":
-		ietype = ipfix.Ipv6Address
-	case "":
-		ietype = ipfix.OctetArray
-	default:
+	ietype, ok := ipfix.FieldTypes[m[7]]
+	if !ok {
 		return ipfix.DictionaryEntry{}, fmt.Errorf("bad IE type in %s", spec)
 	}
 
