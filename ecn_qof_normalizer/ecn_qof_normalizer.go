@@ -26,8 +26,20 @@ func init() {
 		panic(err)
 	}
 
-	doExtractField["destinationTransportPort"] = struct{}{}
-	doExtractField["initialTCPFlags"] = struct{}{}
+	doExtractField = map[string]struct{}{
+		"initialTCPFlags":              struct{}{},
+		"lastSynTcpFlags":              struct{}{},
+		"reverseLastSynTcpFlags":       struct{}{},
+		"reverseQofTcpCharacteristics": struct{}{},
+		"protocolIdentifier":           struct{}{},
+		"flowStartMilliseconds":        struct{}{},
+		"sourceTransportPort":          struct{}{},
+		"destinationTransportPort":     struct{}{},
+		"sourceIPv4Address":            struct{}{},
+		"sourceIPv6Address":            struct{}{},
+		"destinationIPv4Address":       struct{}{},
+		"destinationIPv6Address":       struct{}{},
+	}
 
 }
 
@@ -106,20 +118,20 @@ func parseIESpec(spec string) (ipfix.DictionaryEntry, error) {
 		return ipfix.DictionaryEntry{}, fmt.Errorf("cannot parse iespec %s", spec)
 	}
 
-	pen, err := strconv.Atoi(m[2])
+	pen, err := strconv.Atoi(m[4])
 	if err != nil {
 		pen = 0
 	}
 	pen32 := uint32(pen)
 
-	ienum, err := strconv.Atoi(m[3])
+	ienum, err := strconv.Atoi(m[5])
 	if err != nil {
 		return ipfix.DictionaryEntry{}, fmt.Errorf("missing IE number in %s", spec)
 	}
 	ienum16 := uint16(ienum)
 
 	var ietype ipfix.FieldType
-	switch m[4] {
+	switch m[7] {
 	case "unsigned8":
 		ietype = ipfix.Uint8
 	case "unsigned16":
@@ -534,8 +546,27 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	}
 
 	// now write metadata
+	mdout := make(map[string]interface{})
+	mdcond := make([]string, 0)
 
-	// WORK POINTER
+	// copy all aux metadata from the raw file
+	for k := range md.Metadata {
+		mdout[k] = md.Metadata[k]
+	}
+
+	// create condition list from observed conditions
+	for k := range qobs.hasCondition {
+		mdcond = append(mdcond, k)
+	}
+	mdout["_conditions"] = mdcond
+
+	// add start and end time and owner, since we have it
+	mdout["_owner"] = md.Owner(true)
+	mdout["_time_start"] = md.TimeStart(true).Format(time.RFC3339)
+	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
+
+	// hardcode analyzer path (FIXME, tag?)
+	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_qof_normalizer/ecn_qof_normalizer.json"
 
 	// all done yay
 	return nil
