@@ -28,6 +28,17 @@ type psV1Observation struct {
 	Conditions []string `json:"conditions"`
 }
 
+func fixPsV1Condition(psCondition string) string {
+	switch psCondition {
+	case "ecn.negotiated":
+		return "ecn.negotiation.succeeded"
+	case "ecn.not_negotiated":
+		return "ecn.negotiation.failed"
+	default:
+		return psCondition
+	}
+}
+
 func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePrepend string) ([]pto3.Observation, error) {
 	var psobs psV1Observation
 
@@ -94,7 +105,7 @@ func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePr
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
-		obsen[i].Condition.Name = c
+		obsen[i].Condition.Name = fixPsV1Condition(c)
 	}
 
 	return obsen, nil
