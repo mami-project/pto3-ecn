@@ -1,0 +1,7 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "A normalizer to extract ECN observations from QoF IPFIX files generated during runs of ECNSpider",
+    "_file_types" : ["ecnspider-qof-ipfix", "ecnspider-qof-ipfix-bz2"],
+    "_platform" : "golang-1.9",
+    "_invocation" : "ecn_qof_normalizer"
+}

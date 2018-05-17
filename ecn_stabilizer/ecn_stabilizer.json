@@ -1,0 +1,7 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "An analyzer to combine multiple ECN observations from related sources of identical targets in order to reduce the noise floor",
+    "requires_metadata": ["vantage"],
+    "_platform" : "golang-1.9",
+    "_invocation" : "ecn_stabilizer"
+}
