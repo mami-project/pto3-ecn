@@ -66,9 +66,10 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		}
 
 		counters := stableTable[pathkey]
+
 		if counters == nil {
 			counters = new(condCount)
-			stableTable[obs.Path.Target] = counters
+			stableTable[pathkey] = counters
 		}
 
 		if counters.total == 0 {
@@ -104,6 +105,8 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 			counters.negoFailed++
 		case "ecn.negotiation.reflected":
 			counters.negoReflected++
+		default:
+			counters.total--
 		}
 
 		obsCount++
@@ -223,8 +226,26 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		return fmt.Errorf("error writing metadata: %s", err.Error())
 	}
 
-	return nil
+	// dump the counters table to a table file (debugging)
 
+	// dumpfile, err := os.Create("ecn_stabilizer_table.csv")
+	// if err != nil {
+	// 	log.Fatalf("cannot open dumpfile: %v", err)
+	// }
+	// defer dumpfile.Close()
+
+	// for pathkey := range stableTable {
+	// 	entry := stableTable[pathkey]
+
+	// 	fmt.Fprintf(dumpfile,
+	// 		"%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
+	// 		pathkey, entry.total,
+	// 		entry.connWorks, entry.connBroken,
+	// 		entry.connTransient, entry.connOffline,
+	// 		entry.negoWorks, entry.negoFailed, entry.negoReflected)
+	// }
+
+	return nil
 }
 
 func main() {
