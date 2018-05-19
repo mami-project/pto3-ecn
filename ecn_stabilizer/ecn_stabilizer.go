@@ -48,6 +48,8 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	// create a set table (for metadata generation)
 	setTable := make(map[int]*pto3.ObservationSet)
 
+	obsCount := 0
+
 	// analyze the observation stream into the table
 	err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
 
@@ -100,8 +102,12 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 			counters.negoReflected++
 		}
 
-		return nil
+		obsCount++
+		if obsCount%100000 == 0 {
+			log.Printf("ecn_stabilizer debug observation %d pathkey %s tablesize %d", obsCount, pathkey, len(stableTable))
+		}
 
+		return nil
 	})
 
 	// check for observation read error

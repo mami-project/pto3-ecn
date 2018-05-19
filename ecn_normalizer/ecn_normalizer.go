@@ -34,6 +34,12 @@ func fixPsV1Condition(psCondition string) string {
 		return "ecn.negotiation.succeeded"
 	case "ecn.not_negotiated":
 		return "ecn.negotiation.failed"
+	case "ecn.ect_zero.seen":
+		return "ecn.ipmark.ect0.seen"
+	case "ecn.ect_one.seen":
+		return "ecn.ipmark.ect1.seen"
+	case "ecn.ce.seen":
+		return "ecn.impark.ce.seen"
 	default:
 		return psCondition
 	}
