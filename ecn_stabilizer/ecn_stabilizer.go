@@ -188,9 +188,17 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	// and now the metadata
 	mdout := make(map[string]interface{})
 
-	// inherit arbitrary metadata for all keys without conflict
+	// track sources and inherit arbitrary metadata for all keys without conflict
+	sources := make([]string, 0)
 	conflictingKeys := make(map[string]struct{})
+
 	for setid := range setTable {
+
+		source := setTable[setid].Link()
+		if source != "" {
+			sources = append(sources, source)
+		}
+
 		for k, newval := range setTable[setid].Metadata {
 			if _, ok := conflictingKeys[k]; ok {
 				continue
@@ -212,6 +220,11 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		mdcond = append(mdcond, k)
 	}
 	mdout["_conditions"] = mdcond
+
+	// track sources
+	if len(sources) > 0 {
+		mdout["_sources"] = sources
+	}
 
 	// hardcode analyzer path
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_stabilizer/ecn_stabilizer.json"
