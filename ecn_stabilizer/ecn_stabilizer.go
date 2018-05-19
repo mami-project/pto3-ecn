@@ -96,7 +96,11 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 			counters.connOffline++
 		case "ecn.negotiation.succeeded":
 			counters.negoWorks++
+		case "ecn.negotiated":
+			counters.negoWorks++
 		case "ecn.negotiation.failed":
+			counters.negoFailed++
+		case "ecn.not_negotiated":
 			counters.negoFailed++
 		case "ecn.negotiation.reflected":
 			counters.negoReflected++
