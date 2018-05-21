@@ -10,23 +10,10 @@ import (
 	"io"
 	"log"
 	"os"
-	"time"
 
+	ecn "github.com/mami-project/pto3-ecn"
 	pto3 "github.com/mami-project/pto3-go"
 )
-
-type condCount struct {
-	timeStart     *time.Time
-	timeEnd       *time.Time
-	total         int
-	connWorks     int
-	connBroken    int
-	connTransient int
-	connOffline   int
-	negoWorks     int
-	negoFailed    int
-	negoReflected int
-}
 
 func stabilizeECN(in io.Reader, out io.Writer) error {
 
@@ -43,7 +30,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	negoUnstable := &pto3.Condition{Name: "ecn.stable.negotiation.unstable"}
 
 	// create a table mapping targets to condition counters
-	stableTable := make(map[string]*condCount)
+	stableTable := make(map[string]*ecn.CondCount)
 
 	// create a set table (for metadata generation)
 	setTable := make(map[int]*pto3.ObservationSet)
@@ -68,46 +55,12 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		counters := stableTable[pathkey]
 
 		if counters == nil {
-			counters = new(condCount)
+			counters = new(ecn.CondCount)
 			stableTable[pathkey] = counters
 		}
 
-		if counters.total == 0 {
-			counters.timeStart = obs.TimeStart
-			counters.timeEnd = obs.TimeEnd
-		} else {
-			if counters.timeStart.Sub(*obs.TimeStart) > 0 {
-				counters.timeStart = obs.TimeStart
-			}
-			if obs.TimeEnd.Sub(*counters.timeEnd) > 0 {
-				counters.timeEnd = obs.TimeEnd
-			}
-		}
-
-		counters.total++
-
-		switch obs.Condition.Name {
-		case "ecn.connectivity.works":
-			counters.connWorks++
-		case "ecn.connectivity.broken":
-			counters.connBroken++
-		case "ecn.connectivity.transient":
-			counters.connTransient++
-		case "ecn.connectivity.offline":
-			counters.connOffline++
-		case "ecn.negotiation.succeeded":
-			counters.negoWorks++
-		case "ecn.negotiated":
-			counters.negoWorks++
-		case "ecn.negotiation.failed":
-			counters.negoFailed++
-		case "ecn.not_negotiated":
-			counters.negoFailed++
-		case "ecn.negotiation.reflected":
-			counters.negoReflected++
-		default:
-			counters.total--
-		}
+		// add this observation to the counters
+		counters.Observe(obs)
 
 		obsCount++
 		if obsCount%100000 == 0 {
@@ -122,6 +75,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		return err
 	}
 
+	// track conditions
 	conditionSeen := make(map[string]struct{})
 
 	// now iterate over VP/destination pairs and generate stable observations
@@ -131,24 +85,25 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		entry := stableTable[pathkey]
 
 		cobs := pto3.Observation{
-			TimeStart: entry.timeStart,
-			TimeEnd:   entry.timeEnd,
+			TimeStart: entry.TimeStart,
+			TimeEnd:   entry.TimeEnd,
 			Path:      &pto3.Path{String: pathkey},
 		}
 
-		if entry.connWorks > 0 && entry.connBroken == 0 {
+		switch {
+		case entry.ConnWorks > 0 && entry.ConnBroken == 0:
 			cobs.Condition = connStableWorks
-			obsval = entry.connWorks
-		} else if entry.connBroken > 0 && entry.connWorks == 0 && entry.connTransient == 0 {
+			obsval = entry.ConnWorks
+		case entry.ConnBroken > 0 && entry.ConnWorks == 0 && entry.ConnTransient == 0:
 			cobs.Condition = connStableBroken
-			obsval = entry.connBroken
-		} else if entry.connWorks+entry.connBroken+entry.connTransient == 0 {
+			obsval = entry.ConnBroken
+		case entry.ConnWorks+entry.ConnBroken+entry.ConnTransient == 0:
 			cobs.Condition = connStableOffline
-			obsval = entry.connOffline
-		} else if entry.connWorks+entry.connBroken == 0 {
+			obsval = entry.ConnOffline
+		case entry.ConnWorks+entry.ConnBroken == 0:
 			cobs.Condition = connStableTransient
-			obsval = entry.connTransient
-		} else {
+			obsval = entry.ConnTransient
+		default:
 			cobs.Condition = connUnstable
 			obsval = 0
 		}
@@ -157,21 +112,22 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		conditionSeen[cobs.Condition.Name] = struct{}{}
 
 		nobs := pto3.Observation{
-			TimeStart: entry.timeStart,
-			TimeEnd:   entry.timeEnd,
+			TimeStart: entry.TimeStart,
+			TimeEnd:   entry.TimeEnd,
 			Path:      &pto3.Path{String: pathkey},
 		}
 
-		if entry.negoWorks > 0 && entry.negoFailed == 0 && entry.negoReflected == 0 {
+		switch {
+		case entry.NegoWorks > 0 && entry.NegoFailed == 0 && entry.NegoReflected == 0:
 			nobs.Condition = negoStableWorks
-			obsval = entry.negoWorks
-		} else if entry.negoFailed > 0 && entry.negoWorks == 0 && entry.negoReflected == 0 {
+			obsval = entry.NegoWorks
+		case entry.NegoFailed > 0 && entry.NegoWorks == 0 && entry.NegoReflected == 0:
 			nobs.Condition = negoStableFailed
-			obsval = entry.negoFailed
-		} else if entry.negoReflected > 0 && entry.negoWorks == 0 && entry.negoFailed == 0 {
+			obsval = entry.NegoFailed
+		case entry.NegoReflected > 0 && entry.NegoWorks == 0 && entry.NegoFailed == 0:
 			nobs.Condition = negoStableReflected
-			obsval = entry.negoReflected
-		} else {
+			obsval = entry.NegoReflected
+		default:
 			nobs.Condition = negoUnstable
 			obsval = 0
 		}
@@ -253,9 +209,9 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	// 	fmt.Fprintf(dumpfile,
 	// 		"%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
 	// 		pathkey, entry.total,
-	// 		entry.connWorks, entry.connBroken,
-	// 		entry.connTransient, entry.connOffline,
-	// 		entry.negoWorks, entry.negoFailed, entry.negoReflected)
+	// 		entry.ConnWorks, entry.ConnBroken,
+	// 		entry.ConnTransient, entry.ConnOffline,
+	// 		entry.NegoWorks, entry.NegoFailed, entry.NegoReflected)
 	// }
 
 	return nil
