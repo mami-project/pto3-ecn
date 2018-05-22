@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -34,16 +35,14 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 	mvTable := make(map[string]map[string]*ecn.CondCount)
 
 	// create a set table (for metadata generation)
-	setTable := make(map[int]*pto3.ObservationSet)
+	setTable := make(ecn.SetTable)
 
 	obsCount := 0
 
 	// analyze the observation stream into the tables
 	err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
 
-		if _, ok := setTable[obs.SetID]; !ok {
-			setTable[obs.SetID] = obs.Set
-		}
+		setTable.AddSetFrom(obs)
 
 		countmap := mvTable[obs.Path.Target]
 		if countmap == nil {
@@ -74,7 +73,7 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 	}
 
 	// track conditions
-	conditionSeen := make(map[string]struct{})
+	conditionSeen := make(ecn.ConditionSet)
 
 	// iterate over targets, looking for different outcomes from different sources
 	for target := range mvTable {
@@ -115,7 +114,7 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 		}
 
 		cobs.Value = fmt.Sprintf("%d", obsval)
-		conditionSeen[cobs.Condition.Name] = struct{}{}
+		conditionSeen.AddCondition(cobs.Condition.Name)
 
 		nobs := pto3.Observation{
 			TimeStart: a.TimeStart,
@@ -142,11 +141,33 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 		}
 
 		nobs.Value = fmt.Sprintf("%d", obsval)
-		conditionSeen[nobs.Condition.Name] = struct{}{}
+		conditionSeen.AddCondition(nobs.Condition.Name)
 
+		// write observations
+		obsen := []pto3.Observation{cobs, nobs}
+		if err := pto3.WriteObservations(obsen, out); err != nil {
+			return err
+		}
 	}
 
-	// WORK POINTER now do the metadata
+	// merge metadata from set
+	mdout := setTable.MergeMetadata()
+
+	// add conditions
+	mdout["_conditions"] = conditionSeen.Conditions()
+
+	// hardcode analyzer path
+	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_pathdep/ecn_pathdep.json"
+
+	// serialize and write to stdout
+	b, err := json.Marshal(mdout)
+	if err != nil {
+		return fmt.Errorf("error marshaling metadata: %s", err.Error())
+	}
+
+	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+		return fmt.Errorf("error writing metadata: %s", err.Error())
+	}
 
 	return nil
 }

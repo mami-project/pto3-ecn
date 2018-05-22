@@ -33,16 +33,14 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	stableTable := make(map[string]*ecn.CondCount)
 
 	// create a set table (for metadata generation)
-	setTable := make(map[int]*pto3.ObservationSet)
+	setTable := make(ecn.SetTable)
 
 	obsCount := 0
 
 	// analyze the observation stream into the table
 	err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
 
-		if _, ok := setTable[obs.SetID]; !ok {
-			setTable[obs.SetID] = obs.Set
-		}
+		setTable.AddSetFrom(obs)
 
 		var pathkey string
 		vp := obs.Set.Metadata["vantage"]
@@ -76,7 +74,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	}
 
 	// track conditions
-	conditionSeen := make(map[string]struct{})
+	conditionSeen := make(ecn.ConditionSet)
 
 	// now iterate over VP/destination pairs and generate stable observations
 	for pathkey := range stableTable {
@@ -109,7 +107,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		}
 
 		cobs.Value = fmt.Sprintf("%d", obsval)
-		conditionSeen[cobs.Condition.Name] = struct{}{}
+		conditionSeen.AddCondition(cobs.Condition.Name)
 
 		nobs := pto3.Observation{
 			TimeStart: entry.TimeStart,
@@ -133,7 +131,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		}
 
 		nobs.Value = fmt.Sprintf("%d", obsval)
-		conditionSeen[nobs.Condition.Name] = struct{}{}
+		conditionSeen.AddCondition(nobs.Condition.Name)
 
 		obsen := []pto3.Observation{cobs, nobs}
 		if err := pto3.WriteObservations(obsen, out); err != nil {
@@ -142,33 +140,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	}
 
 	// and now the metadata
-	mdout := make(map[string]interface{})
-
-	// track sources and inherit arbitrary metadata for all keys without conflict
-	sources := make([]string, 0)
-	conflictingKeys := make(map[string]struct{})
-
-	for setid := range setTable {
-
-		source := setTable[setid].Link()
-		if source != "" {
-			sources = append(sources, source)
-		}
-
-		for k, newval := range setTable[setid].Metadata {
-			if _, ok := conflictingKeys[k]; ok {
-				continue
-			} else {
-				existval, ok := mdout[k]
-				if !ok {
-					mdout[k] = newval
-				} else if fmt.Sprintf("%v", existval) != fmt.Sprintf("%v", newval) {
-					delete(mdout, k)
-					conflictingKeys[k] = struct{}{}
-				}
-			}
-		}
-	}
+	mdout := setTable.MergeMetadata()
 
 	// list conditions
 	mdcond := make([]string, 0)
@@ -176,11 +148,6 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 		mdcond = append(mdcond, k)
 	}
 	mdout["_conditions"] = mdcond
-
-	// track sources
-	if len(sources) > 0 {
-		mdout["_sources"] = sources
-	}
 
 	// hardcode analyzer path
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_stabilizer/ecn_stabilizer.json"
