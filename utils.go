@@ -89,11 +89,11 @@ func (cc *CondCount) Add(other *CondCount) {
 		cc.TimeEnd = other.TimeEnd
 	}
 
-	if cc.TimeStart.Sub(*other.TimeStart) > 0 {
+	if other.TimeStart != nil && cc.TimeStart.Sub(*other.TimeStart) > 0 {
 		cc.TimeStart = other.TimeStart
 	}
 
-	if other.TimeEnd.Sub(*cc.TimeEnd) > 0 {
+	if cc.TimeEnd != nil && other.TimeEnd.Sub(*cc.TimeEnd) > 0 {
 		cc.TimeEnd = other.TimeEnd
 	}
 
