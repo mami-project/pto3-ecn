@@ -1,0 +1,19 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "An analyzer to combine ECN observations from multiple vantage points to find evidence of path dependency",
+    "_platform" : "golang-1.9",
+    "_invocation" : "ecn_pathdep",
+    "_conditions": [
+        "ecn.multipoint.connectivity.works",
+        "ecn.multipoint.connectivity.broken",
+        "ecn.multipoint.connectivity.offline",
+        "ecn.multipoint.connectivity.transient",
+        "ecn.multipoint.connectivity.path_dependent",
+        "ecn.multipoint.connectivity.unstable",
+        "ecn.multipoint.negotiation.succeeded",
+        "ecn.multipoint.negotiation.failed",
+        "ecn.multipoint.negotiation.reflected",
+        "ecn.multipoint.negotiation.path_dependent",
+        "ecn.multipoint.negotiation.unstable"
+    ]
+}

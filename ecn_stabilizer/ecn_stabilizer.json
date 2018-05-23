@@ -3,5 +3,16 @@
     "description": "An analyzer to combine multiple ECN observations from related sources of identical targets in order to reduce the noise floor",
     "requires_metadata": ["vantage"],
     "_platform" : "golang-1.9",
-    "_invocation" : "ecn_stabilizer"
+    "_invocation" : "ecn_stabilizer",
+    "_conditions" : [
+        "ecn.stable.connectivity.works",
+        "ecn.stable.connectivity.broken",
+        "ecn.stable.connectivity.offline",
+        "ecn.stable.connectivity.transient",
+        "ecn.stable.connectivity.unstable",
+        "ecn.stable.negotiation.succeeded",
+        "ecn.stable.negotiation.failed",
+        "ecn.stable.negotiation.reflected",
+        "ecn.stable.negotiation.unstable"
+    ]
 }
