@@ -46,13 +46,13 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 
 		countmap := mvTable[obs.Path.Target]
 		if countmap == nil {
-			countmap := make(map[string]*ecn.CondCount)
+			countmap = make(map[string]*ecn.CondCount)
 			mvTable[obs.Path.Target] = countmap
 		}
 
 		counters := countmap[obs.Path.Source]
 		if counters == nil {
-			counters := new(ecn.CondCount)
+			counters = new(ecn.CondCount)
 			countmap[obs.Path.Source] = counters
 		}
 
@@ -61,7 +61,7 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 
 		obsCount++
 		if obsCount%100000 == 0 {
-			log.Printf("ecn_stabilizer debug observation %d tablesize %d", obsCount, len(mvTable))
+			log.Printf("ecn_pathdep debug observation %d tablesize %d", obsCount, len(mvTable))
 		}
 
 		return nil
