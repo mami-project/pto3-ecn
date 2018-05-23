@@ -552,7 +552,7 @@ func normalizeQoF(in io.Reader, metain io.Reader, out io.Writer) error {
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_qof_normalizer/ecn_qof_normalizer.json"
+	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-ecn/master/ecn_qof_normalizer/ecn_qof_normalizer.json"
 
 	// serialize and write to stdout
 	b, err := json.Marshal(mdout)

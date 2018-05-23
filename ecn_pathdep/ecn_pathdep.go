@@ -157,7 +157,7 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 	mdout["_conditions"] = conditionSeen.Conditions()
 
 	// hardcode analyzer path
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_pathdep/ecn_pathdep.json"
+	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-ecn/master/ecn_pathdep/ecn_pathdep.json"
 
 	// serialize and write to stdout
 	b, err := json.Marshal(mdout)

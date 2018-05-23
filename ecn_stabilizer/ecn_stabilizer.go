@@ -150,7 +150,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	mdout["_conditions"] = mdcond
 
 	// hardcode analyzer path
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-ecn/tree/master/ecn_stabilizer/ecn_stabilizer.json"
+	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-ecn/master/ecn_stabilizer/ecn_stabilizer.json"
 
 	// serialize and write to stdout
 	b, err := json.Marshal(mdout)
