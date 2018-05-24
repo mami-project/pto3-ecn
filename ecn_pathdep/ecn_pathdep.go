@@ -86,6 +86,10 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 			a.Add(countmap[source])
 		}
 
+		if a.TimeStart == nil || a.TimeEnd == nil {
+			log.Printf("skipping observation for %s on nil timestamp", target)
+		}
+
 		cobs := pto3.Observation{
 			TimeStart: a.TimeStart,
 			TimeEnd:   a.TimeEnd,
