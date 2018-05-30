@@ -30,8 +30,8 @@ def metadata_from_ps_ndjson(fp):
             z = b    
             # print("z is now: "+z.strftime("%Y-%m-%dT%H:%M:%S"))
 
-    return {'time_start': y.strftime("%Y-%m-%dT%H:%M:%S"),
-            'time_end': z.strftime("%Y-%m-%dT%H:%M:%S")}
+    return {'time_start': y.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            'time_end': z.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 def write_metadata_for(filename, metadata_fn):
     metafilename = filename + ".meta.json"
