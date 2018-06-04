@@ -36,7 +36,7 @@ func fixCondition(cond string) (string, string) {
 
 	var value string
 	if len(cslice) > 1 {
-		strings.Join(cslice[1:len(cslice)], ":")
+		value = strings.Join(cslice[1:len(cslice)], ":")
 	}
 
 	// Rewrite old conditions
