@@ -28,7 +28,7 @@ type psV1Observation struct {
 	Conditions []string `json:"conditions"`
 }
 
-func fixPsV1Condition(psCondition string) string {
+func fixCondition(psCondition string) string {
 	switch psCondition {
 	case "ecn.negotiated":
 		return "ecn.negotiation.succeeded"
@@ -111,7 +111,108 @@ func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePr
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
-		obsen[i].Condition.Name = fixPsV1Condition(c)
+		obsen[i].Condition.Name = fixCondition(c)
+	}
+
+	return obsen, nil
+}
+
+type psV2Observation struct {
+	Time struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"time"`
+	Path       []string `json:"path"`
+	Conditions []string `json:"conditions"`
+	CanidInfo  struct {
+		ASN int `json:"ASN"`
+	} `json:"canid_info`
+}
+
+func extractV2Observations(ndjsonLine string, sourceOverride string, sourcePrepend string) ([]pto3.Observation, error) {
+	var psobs psV2Observation
+
+	if err := json.Unmarshal([]byte(ndjsonLine), &psobs); err != nil {
+		return nil, err
+	}
+
+	// try to parse timestamps
+	formats := []string{"2006-01-02 15:04:05.000000", "2006-01-02 15:04:05"}
+
+	var start, end time.Time
+	var err error
+	for _, timefmt := range formats {
+		start, err = time.Parse(timefmt, psobs.Time.From)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse start time: %s", err.Error())
+	}
+
+	for _, timefmt := range formats {
+		end, err = time.Parse(timefmt, psobs.Time.To)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse end time: %s", err.Error())
+	}
+
+	// edit path: source override and prepend, add * if missing, extract ASN
+	// from Canid information if present
+
+	if psobs.Path != nil && len(psobs.Path) >= 2 {
+		if sourceOverride != "" {
+			psobs.Path[0] = sourceOverride
+		}
+
+		if sourcePrepend != "" {
+			psobs.Path = append([]string{sourcePrepend}, psobs.Path...)
+		}
+
+		star := ""
+		if len(psobs.Path) > 2 && psobs.Path[len(psobs.Path)-2] != "*" {
+			star = "*"
+		}
+
+		canidAS := ""
+		if psobs.CanidInfo.ASN != 0 {
+			canidAS = fmt.Sprintf("AS%d", psobs.CanidInfo.ASN)
+		}
+
+		switch {
+		case star != "" && canidAS != "":
+			dip := psobs.Path[len(psobs.Path)-1]
+			psobs.Path[len(psobs.Path)-1] = star
+			psobs.Path = append(psobs.Path, canidAS)
+			psobs.Path = append(psobs.Path, dip)
+		case star == "" && canidAS != "":
+			dip := psobs.Path[len(psobs.Path)-1]
+			psobs.Path[len(psobs.Path)-1] = canidAS
+			psobs.Path = append(psobs.Path, dip)
+		case star != "" && canidAS == "":
+			dip := psobs.Path[len(psobs.Path)-1]
+			psobs.Path[len(psobs.Path)-1] = star
+			psobs.Path = append(psobs.Path, dip)
+		}
+	} else {
+		return nil, fmt.Errorf("bad or missing path")
+	}
+
+	path := new(pto3.Path)
+	path.String = strings.Join(psobs.Path, " ")
+
+	// now create an observation for each condition
+	obsen := make([]pto3.Observation, len(psobs.Conditions))
+	for i, c := range psobs.Conditions {
+		obsen[i].TimeStart = &start
+		obsen[i].TimeEnd = &end
+		obsen[i].Path = path
+		obsen[i].Condition = new(pto3.Condition)
+		obsen[i].Condition.Name = fixCondition(c)
 	}
 
 	return obsen, nil
@@ -135,6 +236,12 @@ func normalizeECN(in io.Reader, metain io.Reader, out io.Writer) error {
 	case "pathspider-v1-ecn-ndjson-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
 		extractFunc = extractECNV1Observations
+	case "pathspider-v2-ndjson":
+		scanner = bufio.NewScanner(in)
+		extractFunc = extractV2Observations
+	case "pathspider-v2-ndjson-bz2":
+		scanner = bufio.NewScanner(bzip2.NewReader(in))
+		extractFunc = extractV2Observations
 	default:
 		return fmt.Errorf("unsupported filetype %s", md.Filetype(true))
 	}
