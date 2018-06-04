@@ -135,7 +135,7 @@ type psV2Observation struct {
 	Conditions []string `json:"conditions"`
 	CanidInfo  struct {
 		ASN int `json:"ASN"`
-	} `json:"canid_info`
+	} `json:"canid_info"`
 }
 
 func extractV2Observations(ndjsonLine string, sourceOverride string, sourcePrepend string) ([]pto3.Observation, error) {
