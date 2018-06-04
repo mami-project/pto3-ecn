@@ -28,21 +28,28 @@ type psV1Observation struct {
 	Conditions []string `json:"conditions"`
 }
 
-func fixCondition(psCondition string) string {
-	switch psCondition {
+func fixCondition(cond string) (string, string) {
+
+	// Split values at :
+	cslice := strings.Split(cond, ":")
+	cond = cslice[0]
+	value := cslice[1]
+
+	// Rewrite old conditions
+	switch cond {
 	case "ecn.negotiated":
-		return "ecn.negotiation.succeeded"
+		cond = "ecn.negotiation.succeeded"
 	case "ecn.not_negotiated":
-		return "ecn.negotiation.failed"
+		cond = "ecn.negotiation.failed"
 	case "ecn.ect_zero.seen":
-		return "ecn.ipmark.ect0.seen"
+		cond = "ecn.ipmark.ect0.seen"
 	case "ecn.ect_one.seen":
-		return "ecn.ipmark.ect1.seen"
+		cond = "ecn.ipmark.ect1.seen"
 	case "ecn.ce.seen":
-		return "ecn.impark.ce.seen"
-	default:
-		return psCondition
+		cond = "ecn.impark.ce.seen"
 	}
+
+	return cond, value
 }
 
 func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePrepend string) ([]pto3.Observation, error) {
@@ -111,7 +118,9 @@ func extractECNV1Observations(ndjsonLine string, sourceOverride string, sourcePr
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
-		obsen[i].Condition.Name = fixCondition(c)
+		cond, value := fixCondition(c)
+		obsen[i].Condition.Name = cond
+		obsen[i].Value = value
 	}
 
 	return obsen, nil
@@ -212,7 +221,9 @@ func extractV2Observations(ndjsonLine string, sourceOverride string, sourcePrepe
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
 		obsen[i].Condition = new(pto3.Condition)
-		obsen[i].Condition.Name = fixCondition(c)
+		cond, value := fixCondition(c)
+		obsen[i].Condition.Name = cond
+		obsen[i].Value = value
 	}
 
 	return obsen, nil
