@@ -33,7 +33,11 @@ func fixCondition(cond string) (string, string) {
 	// Split values at :
 	cslice := strings.Split(cond, ":")
 	cond = cslice[0]
-	value := cslice[1]
+
+	var value string
+	if len(cslice) > 1 {
+		strings.Join(cslice[1:len(cslice)], ":")
+	}
 
 	// Rewrite old conditions
 	switch cond {
