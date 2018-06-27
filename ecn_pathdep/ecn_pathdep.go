@@ -34,15 +34,10 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 	// map targets to sources to condition counts
 	mvTable := make(map[string]map[string]*ecn.CondCount)
 
-	// create a set table (for metadata generation)
-	setTable := make(ecn.SetTable)
-
 	obsCount := 0
 
 	// analyze the observation stream into the tables
-	err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
-
-		setTable.AddSetFrom(obs)
+	setTable, err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
 
 		countmap := mvTable[obs.Path.Target]
 		if countmap == nil {
@@ -73,7 +68,7 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 	}
 
 	// track conditions
-	conditionSeen := make(ecn.ConditionSet)
+	conditionSeen := make(pto3.ConditionSet)
 
 	// iterate over targets, looking for different outcomes from different sources
 	for target := range mvTable {

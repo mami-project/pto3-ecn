@@ -32,15 +32,10 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	// create a table mapping targets to condition counters
 	stableTable := make(map[string]*ecn.CondCount)
 
-	// create a set table (for metadata generation)
-	setTable := make(ecn.SetTable)
-
 	obsCount := 0
 
 	// analyze the observation stream into the table
-	err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
-
-		setTable.AddSetFrom(obs)
+	setTable, err := pto3.AnalyzeObservationStream(in, func(obs *pto3.Observation) error {
 
 		var pathkey string
 		vp := obs.Set.Metadata["vantage"]
@@ -74,7 +69,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	}
 
 	// track conditions
-	conditionSeen := make(ecn.ConditionSet)
+	conditionSeen := make(pto3.ConditionSet)
 
 	// now iterate over VP/destination pairs and generate stable observations
 	for pathkey := range stableTable {
@@ -143,11 +138,7 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	mdout := setTable.MergeMetadata()
 
 	// list conditions
-	mdcond := make([]string, 0)
-	for k := range conditionSeen {
-		mdcond = append(mdcond, k)
-	}
-	mdout["_conditions"] = mdcond
+	mdout["_conditions"] = conditionSeen.Conditions()
 
 	// hardcode analyzer path
 	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-ecn/master/ecn_stabilizer/ecn_stabilizer.json"
@@ -161,25 +152,6 @@ func stabilizeECN(in io.Reader, out io.Writer) error {
 	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
 		return fmt.Errorf("error writing metadata: %s", err.Error())
 	}
-
-	// dump the counters table to a table file (debugging)
-
-	// dumpfile, err := os.Create("ecn_stabilizer_table.csv")
-	// if err != nil {
-	// 	log.Fatalf("cannot open dumpfile: %v", err)
-	// }
-	// defer dumpfile.Close()
-
-	// for pathkey := range stableTable {
-	// 	entry := stableTable[pathkey]
-
-	// 	fmt.Fprintf(dumpfile,
-	// 		"%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
-	// 		pathkey, entry.total,
-	// 		entry.ConnWorks, entry.ConnBroken,
-	// 		entry.ConnTransient, entry.ConnOffline,
-	// 		entry.NegoWorks, entry.NegoFailed, entry.NegoReflected)
-	// }
 
 	return nil
 }

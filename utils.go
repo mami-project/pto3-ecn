@@ -1,7 +1,6 @@
 package ecn
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -120,63 +119,4 @@ func (cc *CondCount) Add(other *CondCount) {
 	cc.NoIpEct0 += other.NoIpEct0
 	cc.IpEct1 += other.IpEct1
 	cc.NoIpEct1 += other.NoIpEct1
-}
-
-type ConditionSet map[string]struct{}
-
-func (cs ConditionSet) AddCondition(condition string) {
-	cs[condition] = struct{}{}
-}
-
-func (cd ConditionSet) Conditions() []string {
-	out := make([]string, 0)
-	for k := range cd {
-		out = append(out, k)
-	}
-	return out
-}
-
-type SetTable map[int]*pto3.ObservationSet
-
-func (st SetTable) AddSetFrom(obs *pto3.Observation) {
-	if _, ok := st[obs.SetID]; !ok {
-		st[obs.SetID] = obs.Set
-	}
-}
-
-func (st SetTable) MergeMetadata() map[string]interface{} {
-	mdout := make(map[string]interface{})
-
-	sources := make([]string, 0)
-	conflictingKeys := make(map[string]struct{})
-
-	for setid := range st {
-
-		// track sources
-		source := st[setid].Link()
-		if source != "" {
-			sources = append(sources, source)
-		}
-
-		// inherit arbitrary metadata for all keys without conflict
-		for k, newval := range st[setid].Metadata {
-			if _, ok := conflictingKeys[k]; ok {
-				continue
-			} else {
-				existval, ok := mdout[k]
-				if !ok {
-					mdout[k] = newval
-				} else if fmt.Sprintf("%v", existval) != fmt.Sprintf("%v", newval) {
-					delete(mdout, k)
-					conflictingKeys[k] = struct{}{}
-				}
-			}
-		}
-	}
-
-	if len(sources) > 0 {
-		mdout["_sources"] = sources
-	}
-
-	return mdout
 }
