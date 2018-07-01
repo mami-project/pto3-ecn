@@ -82,7 +82,7 @@ type psV1Observation struct {
 	Conditions []string      `json:"conditions"`
 }
 
-func normalizeV1(rec string, mdin *pto3.RawMetadata, mdout map[string]interface{}) ([]pto3.Observation, error) {
+func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]interface{}) ([]pto3.Observation, error) {
 	var psobs psV1Observation
 
 	// parse ndjson line
@@ -153,11 +153,11 @@ type psV2Observation struct {
 	} `json:"canid_info"`
 }
 
-func normalizeV2(rec string, mdin *pto3.RawMetadata, mdout map[string]interface{}) ([]pto3.Observation, error) {
+func normalizeV2(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]interface{}) ([]pto3.Observation, error) {
 	var psobs psV2Observation
 
 	// parse ndjson line
-	if err := json.Unmarshal([]byte(rec), &psobs); err != nil {
+	if err := json.Unmarshal(rec, &psobs); err != nil {
 		return nil, err
 	}
 
@@ -234,10 +234,12 @@ func main() {
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
 	// create a scanning normalizer
-	sn := pto3.NewScanningNormalizer(metadataURL)
+	sn := pto3.NewParallelScanningNormalizer(metadataURL, 4)
 	sn.RegisterFiletype("pathspider-v1-ecn-ndjson", bufio.ScanLines, normalizeV1, nil)
 	sn.RegisterFiletype("pathspider-v2-ndjson", bufio.ScanLines, normalizeV2, nil)
 
 	// and run it
-	log.Fatal(sn.Normalize(os.Stdin, mdfile, os.Stdout))
+	if err := sn.Normalize(os.Stdin, mdfile, os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 }

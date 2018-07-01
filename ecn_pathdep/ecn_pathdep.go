@@ -18,18 +18,18 @@ import (
 func pathdepECN(in io.Reader, out io.Writer) error {
 
 	// create some conditions
-	connMPWorks := &pto3.Condition{Name: "ecn.multipoint.connectivity.works"}
-	connMPBroken := &pto3.Condition{Name: "ecn.multipoint.connectivity.broken"}
-	connMPOffline := &pto3.Condition{Name: "ecn.multipoint.connectivity.offline"}
-	connMPTransient := &pto3.Condition{Name: "ecn.multipoint.connectivity.transient"}
-	connMPPathDep := &pto3.Condition{Name: "ecn.multipoint.connectivity.path_dependent"}
-	connMPUnstable := &pto3.Condition{Name: "ecn.multipoint.connectivity.unstable"}
+	connMPWorks := pto3.NewCondition("ecn.multipoint.connectivity.works")
+	connMPBroken := pto3.NewCondition("ecn.multipoint.connectivity.broken")
+	connMPOffline := pto3.NewCondition("ecn.multipoint.connectivity.offline")
+	connMPTransient := pto3.NewCondition("ecn.multipoint.connectivity.transient")
+	connMPPathDep := pto3.NewCondition("ecn.multipoint.connectivity.path_dependent")
+	connMPUnstable := pto3.NewCondition("ecn.multipoint.connectivity.unstable")
 
-	negoMPWorks := &pto3.Condition{Name: "ecn.multipoint.negotiation.succeeded"}
-	negoMPFailed := &pto3.Condition{Name: "ecn.multipoint.negotiation.failed"}
-	negoMPReflected := &pto3.Condition{Name: "ecn.multipoint.negotiation.reflected"}
-	negoMPPathDep := &pto3.Condition{Name: "ecn.multipoint.negotiation.path_dependent"}
-	negoMPUnstable := &pto3.Condition{Name: "ecn.multipoint.negotiation.unstable"}
+	negoMPWorks := pto3.NewCondition("ecn.multipoint.negotiation.succeeded")
+	negoMPFailed := pto3.NewCondition("ecn.multipoint.negotiation.failed")
+	negoMPReflected := pto3.NewCondition("ecn.multipoint.negotiation.reflected")
+	negoMPPathDep := pto3.NewCondition("ecn.multipoint.negotiation.path_dependent")
+	negoMPUnstable := pto3.NewCondition("ecn.multipoint.negotiation.unstable")
 
 	// map targets to sources to condition counts
 	mvTable := make(map[string]map[string]*ecn.CondCount)
