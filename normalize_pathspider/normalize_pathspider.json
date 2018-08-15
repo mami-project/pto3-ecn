@@ -1,0 +1,7 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "A normalizer to extract observations from Pathspider version 2 NDJSON files",
+    "_file_types" : ["pathspider-v2-ndjson", "pathspider-v2-ndjson-bz2"],
+    "_platform" : "golang-1.9",
+    "_invocation" : "normalize_pathspider"
+}
