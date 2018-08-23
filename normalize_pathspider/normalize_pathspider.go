@@ -19,7 +19,7 @@ var conditionFixTable = map[string]string{
 	"ecn.not_negotiated": "ecn.negotiation.failed",
 	"ecn.ect_zero.seen":  "ecn.ipmark.ect0.seen",
 	"ecn.ect_one.seen":   "ecn.ipmark.ect1.seen",
-	"ecn.ce.seen":        "ecn.impark.ce.seen",
+	"ecn.ce.seen":        "ecn.ipmark.ce.seen",
 }
 
 var timestampFormats = []string{"2006-01-02 15:04:05.000000", "2006-01-02 15:04:05"}
