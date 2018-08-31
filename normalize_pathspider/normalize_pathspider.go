@@ -82,6 +82,12 @@ type psV1Observation struct {
 	Conditions []string      `json:"conditions"`
 }
 
+var psV1NotSeenECNAspects = map[string]struct{}{
+	"ecn.ipmark.ce":   struct{}{},
+	"ecn.ipmark.ect0": struct{}{},
+	"ecn.ipmark.ect1": struct{}{},
+}
+
 func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]interface{}) ([]pto3.Observation, error) {
 	var psobs psV1Observation
 
@@ -126,16 +132,44 @@ func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]int
 
 	path.String = strings.Join(pathElements, " ")
 
+	// prep data structures to fill not present ECN not_seen aspects
+	missingECNNotSeen := mdin.Get("missing_ecn_not_seen", true)
+	var ecnMarkSeen map[string]bool
+	if missingECNNotSeen != "" {
+		ecnMarkSeen = make(map[string]bool)
+	}
+
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
 	for i, c := range psobs.Conditions {
 		obsen[i].TimeStart = &start
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
-		obsen[i].Condition = new(pto3.Condition)
-		cond, value := fixCondition(c)
-		obsen[i].Condition.Name = cond
-		obsen[i].Value = value
+		nameStr, valueStr := fixCondition(c)
+		cond := pto3.NewCondition(nameStr)
+		obsen[i].Condition = cond
+		obsen[i].Value = valueStr
+
+		// fill in mark we've seen if we care about that sort of thing
+		if missingECNNotSeen != "" {
+			if _, ok := psV1NotSeenECNAspects[cond.Aspect]; ok {
+				ecnMarkSeen[cond.Aspect] = true
+			}
+		}
+	}
+
+	// check aspects for marks we haven't seen and generate conditions
+	if missingECNNotSeen != "" {
+		for markAspect := range psV1NotSeenECNAspects {
+			if !ecnMarkSeen[markAspect] {
+				var notSeenObs pto3.Observation
+				notSeenObs.TimeStart = &start
+				notSeenObs.TimeEnd = &end
+				notSeenObs.Path = path
+				notSeenObs.Condition = pto3.NewCondition(markAspect + ".not_seen")
+				obsen = append(obsen, notSeenObs)
+			}
+		}
 	}
 
 	return obsen, nil
