@@ -132,12 +132,7 @@ func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]int
 
 	path.String = strings.Join(pathElements, " ")
 
-	// prep data structures to fill not present ECN not_seen aspects
-	missingECNNotSeen := mdin.Get("missing_ecn_not_seen", true)
-	var ecnMarkSeen map[string]bool
-	if missingECNNotSeen != "" {
-		ecnMarkSeen = make(map[string]bool)
-	}
+	ecnMarkSeen := make(map[string]bool)
 
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
@@ -151,24 +146,20 @@ func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]int
 		obsen[i].Value = valueStr
 
 		// fill in mark we've seen if we care about that sort of thing
-		if missingECNNotSeen != "" {
-			if _, ok := psV1NotSeenECNAspects[cond.Aspect]; ok {
-				ecnMarkSeen[cond.Aspect] = true
-			}
+		if _, ok := psV1NotSeenECNAspects[cond.Aspect]; ok {
+			ecnMarkSeen[cond.Aspect] = true
 		}
 	}
 
 	// check aspects for marks we haven't seen and generate conditions
-	if missingECNNotSeen != "" {
-		for markAspect := range psV1NotSeenECNAspects {
-			if !ecnMarkSeen[markAspect] {
-				var notSeenObs pto3.Observation
-				notSeenObs.TimeStart = &start
-				notSeenObs.TimeEnd = &end
-				notSeenObs.Path = path
-				notSeenObs.Condition = pto3.NewCondition(markAspect + ".not_seen")
-				obsen = append(obsen, notSeenObs)
-			}
+	for markAspect := range psV1NotSeenECNAspects {
+		if !ecnMarkSeen[markAspect] {
+			var notSeenObs pto3.Observation
+			notSeenObs.TimeStart = &start
+			notSeenObs.TimeEnd = &end
+			notSeenObs.Path = path
+			notSeenObs.Condition = pto3.NewCondition(markAspect + ".not_seen")
+			obsen = append(obsen, notSeenObs)
 		}
 	}
 
