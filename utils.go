@@ -16,9 +16,11 @@ type CondCount struct {
 	ConnBroken    int
 	ConnTransient int
 	ConnOffline   int
+	ConnUnstable  int
 	NegoWorks     int
 	NegoFailed    int
 	NegoReflected int
+	NegoUnstable  int
 	IpEct0        int
 	IpEct1        int
 	IpCe          int
@@ -58,12 +60,16 @@ func (cc *CondCount) Observe(obs *pto3.Observation) {
 		cc.ConnTransient += increment
 	case "ecn.connectivity.offline", "ecn.stable.connectivity.offline":
 		cc.ConnOffline += increment
+	case "ecn.connectivity.unstable", "ecn.stable.connectivity.unstable":
+		cc.ConnUnstable += increment
 	case "ecn.negotiation.succeeded", "ecn.stable.negotiation.succeeded", "ecn.negotiated":
 		cc.NegoWorks += increment
 	case "ecn.negotiation.failed", "ecn.stable.negotiation.failed", "ecn.not_negotiated":
 		cc.NegoFailed += increment
 	case "ecn.negotiation.reflected", "ecn.stable.negotiation.reflected":
 		cc.NegoReflected += increment
+	case "ecn.negotiation.unstable", "ecn.stable.negotiation.unstable":
+		cc.NegoUnstable += increment
 	case "ecn.ipmark.ect0.seen":
 		cc.IpEct0 += increment
 	case "ecn.ipmark.ect1.seen":
