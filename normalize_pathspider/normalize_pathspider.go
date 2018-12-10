@@ -149,7 +149,7 @@ type psV2Observation struct {
 	Path       []string `json:"path"`
 	Conditions []string `json:"conditions"`
 	CanidInfo  struct {
-		ASN int `json:"ASN"`
+		ASN uint32 `json:"ASN"`
 	} `json:"canid_info"`
 }
 
