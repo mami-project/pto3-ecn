@@ -18,18 +18,18 @@ import (
 func pathdepECN(in io.Reader, out io.Writer) error {
 
 	// create some conditions
-	connMPWorks := &pto3.Condition{Name: "ecn.multipoint.connectivity.works"}
-	connMPBroken := &pto3.Condition{Name: "ecn.multipoint.connectivity.broken"}
-	connMPOffline := &pto3.Condition{Name: "ecn.multipoint.connectivity.offline"}
-	connMPTransient := &pto3.Condition{Name: "ecn.multipoint.connectivity.transient"}
-	connMPPathDep := &pto3.Condition{Name: "ecn.multipoint.connectivity.path_dependent"}
-	connMPUnstable := &pto3.Condition{Name: "ecn.multipoint.connectivity.unstable"}
+	connMPWorks := pto3.NewCondition("ecn.multipoint.connectivity.works")
+	connMPBroken := pto3.NewCondition("ecn.multipoint.connectivity.broken")
+	connMPOffline := pto3.NewCondition("ecn.multipoint.connectivity.offline")
+	connMPTransient := pto3.NewCondition("ecn.multipoint.connectivity.transient")
+	connMPPathDep := pto3.NewCondition("ecn.multipoint.connectivity.path_dependent")
+	connMPUnstable := pto3.NewCondition("ecn.multipoint.connectivity.unstable")
 
-	negoMPWorks := &pto3.Condition{Name: "ecn.multipoint.negotiation.succeeded"}
-	negoMPFailed := &pto3.Condition{Name: "ecn.multipoint.negotiation.failed"}
-	negoMPReflected := &pto3.Condition{Name: "ecn.multipoint.negotiation.reflected"}
-	negoMPPathDep := &pto3.Condition{Name: "ecn.multipoint.negotiation.path_dependent"}
-	negoMPUnstable := &pto3.Condition{Name: "ecn.multipoint.negotiation.unstable"}
+	negoMPWorks := pto3.NewCondition("ecn.multipoint.negotiation.succeeded")
+	negoMPFailed := pto3.NewCondition("ecn.multipoint.negotiation.failed")
+	negoMPReflected := pto3.NewCondition("ecn.multipoint.negotiation.reflected")
+	negoMPPathDep := pto3.NewCondition("ecn.multipoint.negotiation.path_dependent")
+	negoMPUnstable := pto3.NewCondition("ecn.multipoint.negotiation.unstable")
 
 	// map targets to sources to condition counts
 	mvTable := make(map[string]map[string]*ecn.CondCount)
@@ -92,9 +92,9 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 		}
 
 		switch {
-		case a.ConnBroken > 0 && a.ConnWorks > 0:
-			cobs.Condition = connMPPathDep
-			obsval = len(countmap)
+		case a.ConnBroken+a.ConnOffline+a.ConnTransient+a.ConnWorks == 0:
+			cobs.Condition = connMPUnstable
+			obsval = a.ConnUnstable
 		case a.ConnWorks > 0 && a.ConnBroken+a.ConnTransient == 0:
 			cobs.Condition = connMPWorks
 			obsval = a.ConnWorks
@@ -108,8 +108,8 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 			cobs.Condition = connMPOffline
 			obsval = a.ConnOffline
 		default:
-			cobs.Condition = connMPUnstable
-			obsval = 0
+			cobs.Condition = connMPPathDep
+			obsval = len(countmap)
 		}
 
 		cobs.Value = fmt.Sprintf("%d", obsval)
@@ -122,9 +122,9 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 		}
 
 		switch {
-		case a.NegoWorks > 0 && a.NegoFailed > 0:
-			nobs.Condition = negoMPPathDep
-			obsval = len(countmap)
+		case a.NegoWorks+a.NegoFailed+a.NegoReflected == 0:
+			nobs.Condition = negoMPUnstable
+			obsval = a.NegoUnstable
 		case a.NegoWorks > 0 && a.NegoFailed+a.NegoReflected == 0:
 			nobs.Condition = negoMPWorks
 			obsval = a.NegoWorks
@@ -135,8 +135,8 @@ func pathdepECN(in io.Reader, out io.Writer) error {
 			nobs.Condition = negoMPReflected
 			obsval = a.NegoReflected
 		default:
-			nobs.Condition = negoMPUnstable
-			obsval = 0
+			nobs.Condition = negoMPPathDep
+			obsval = len(countmap)
 		}
 
 		nobs.Value = fmt.Sprintf("%d", obsval)

@@ -19,7 +19,7 @@ var conditionFixTable = map[string]string{
 	"ecn.not_negotiated": "ecn.negotiation.failed",
 	"ecn.ect_zero.seen":  "ecn.ipmark.ect0.seen",
 	"ecn.ect_one.seen":   "ecn.ipmark.ect1.seen",
-	"ecn.ce.seen":        "ecn.impark.ce.seen",
+	"ecn.ce.seen":        "ecn.ipmark.ce.seen",
 }
 
 var timestampFormats = []string{"2006-01-02 15:04:05.000000", "2006-01-02 15:04:05"}
@@ -82,7 +82,13 @@ type psV1Observation struct {
 	Conditions []string      `json:"conditions"`
 }
 
-func normalizeV1(rec string, mdin *pto3.RawMetadata, mdout map[string]interface{}) ([]pto3.Observation, error) {
+var psV1NotSeenECNAspects = map[string]struct{}{
+	"ecn.ipmark.ce":   struct{}{},
+	"ecn.ipmark.ect0": struct{}{},
+	"ecn.ipmark.ect1": struct{}{},
+}
+
+func normalizeV1(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]interface{}) ([]pto3.Observation, error) {
 	var psobs psV1Observation
 
 	// parse ndjson line
@@ -126,16 +132,35 @@ func normalizeV1(rec string, mdin *pto3.RawMetadata, mdout map[string]interface{
 
 	path.String = strings.Join(pathElements, " ")
 
+	ecnMarkSeen := make(map[string]bool)
+
 	// now create an observation for each condition
 	obsen := make([]pto3.Observation, len(psobs.Conditions))
 	for i, c := range psobs.Conditions {
 		obsen[i].TimeStart = &start
 		obsen[i].TimeEnd = &end
 		obsen[i].Path = path
-		obsen[i].Condition = new(pto3.Condition)
-		cond, value := fixCondition(c)
-		obsen[i].Condition.Name = cond
-		obsen[i].Value = value
+		nameStr, valueStr := fixCondition(c)
+		cond := pto3.NewCondition(nameStr)
+		obsen[i].Condition = cond
+		obsen[i].Value = valueStr
+
+		// fill in mark we've seen if we care about that sort of thing
+		if _, ok := psV1NotSeenECNAspects[cond.Aspect]; ok {
+			ecnMarkSeen[cond.Aspect] = true
+		}
+	}
+
+	// check aspects for marks we haven't seen and generate conditions
+	for markAspect := range psV1NotSeenECNAspects {
+		if !ecnMarkSeen[markAspect] {
+			var notSeenObs pto3.Observation
+			notSeenObs.TimeStart = &start
+			notSeenObs.TimeEnd = &end
+			notSeenObs.Path = path
+			notSeenObs.Condition = pto3.NewCondition(markAspect + ".not_seen")
+			obsen = append(obsen, notSeenObs)
+		}
 	}
 
 	return obsen, nil
@@ -153,11 +178,11 @@ type psV2Observation struct {
 	} `json:"canid_info"`
 }
 
-func normalizeV2(rec string, mdin *pto3.RawMetadata, mdout map[string]interface{}) ([]pto3.Observation, error) {
+func normalizeV2(rec []byte, mdin *pto3.RawMetadata, mdout chan<- map[string]interface{}) ([]pto3.Observation, error) {
 	var psobs psV2Observation
 
 	// parse ndjson line
-	if err := json.Unmarshal([]byte(rec), &psobs); err != nil {
+	if err := json.Unmarshal(rec, &psobs); err != nil {
 		return nil, err
 	}
 
@@ -234,10 +259,12 @@ func main() {
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
 	// create a scanning normalizer
-	sn := pto3.NewScanningNormalizer(metadataURL)
+	sn := pto3.NewParallelScanningNormalizer(metadataURL, 4)
 	sn.RegisterFiletype("pathspider-v1-ecn-ndjson", bufio.ScanLines, normalizeV1, nil)
 	sn.RegisterFiletype("pathspider-v2-ndjson", bufio.ScanLines, normalizeV2, nil)
 
 	// and run it
-	log.Fatal(sn.Normalize(os.Stdin, mdfile, os.Stdout))
+	if err := sn.Normalize(os.Stdin, mdfile, os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 }

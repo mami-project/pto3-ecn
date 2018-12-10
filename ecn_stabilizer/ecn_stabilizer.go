@@ -18,16 +18,16 @@ import (
 func stabilizeECN(in io.Reader, out io.Writer) error {
 
 	// create some conditions
-	connStableWorks := &pto3.Condition{Name: "ecn.stable.connectivity.works"}
-	connStableBroken := &pto3.Condition{Name: "ecn.stable.connectivity.broken"}
-	connStableOffline := &pto3.Condition{Name: "ecn.stable.connectivity.offline"}
-	connStableTransient := &pto3.Condition{Name: "ecn.stable.connectivity.transient"}
-	connUnstable := &pto3.Condition{Name: "ecn.stable.connectivity.unstable"}
+	connStableWorks := pto3.NewCondition("ecn.stable.connectivity.works")
+	connStableBroken := pto3.NewCondition("ecn.stable.connectivity.broken")
+	connStableOffline := pto3.NewCondition("ecn.stable.connectivity.offline")
+	connStableTransient := pto3.NewCondition("ecn.stable.connectivity.transient")
+	connUnstable := pto3.NewCondition("ecn.stable.connectivity.unstable")
 
-	negoStableWorks := &pto3.Condition{Name: "ecn.stable.negotiation.succeeded"}
-	negoStableFailed := &pto3.Condition{Name: "ecn.stable.negotiation.failed"}
-	negoStableReflected := &pto3.Condition{Name: "ecn.stable.negotiation.reflected"}
-	negoUnstable := &pto3.Condition{Name: "ecn.stable.negotiation.unstable"}
+	negoStableWorks := pto3.NewCondition("ecn.stable.negotiation.succeeded")
+	negoStableFailed := pto3.NewCondition("ecn.stable.negotiation.failed")
+	negoStableReflected := pto3.NewCondition("ecn.stable.negotiation.reflected")
+	negoUnstable := pto3.NewCondition("ecn.stable.negotiation.unstable")
 
 	// create a table mapping targets to condition counters
 	stableTable := make(map[string]*ecn.CondCount)
